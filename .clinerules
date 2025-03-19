@@ -1,0 +1,37 @@
+<clinerules>
+    <rule category="commit">
+        <description>Always use conventional commit format</description>
+        <pattern>^(feat|fix|docs|style|refactor|perf|test|chore)(\(.+\))?: .+$</pattern>
+    </rule>
+    <rule category="golang">
+        <description>Run go fmt on all Go files</description>
+        <command>go fmt ./...</command>
+    </rule>
+    <rule category="golang">
+        <description>Run go vet on all Go files</description>
+        <command>go vet ./...</command>
+    </rule>
+    <rule category="golang">
+        <description>Run staticcheck for code quality</description>
+        <command>staticcheck ./...</command>
+    </rule>
+    <rule category="testing">
+        <description>Write unit tests for critical components</description>
+        <threshold>80%</threshold>
+    </rule>
+    <rule category="project">
+        <description>Each MCP server must be in its own cmd/megatool-<server>/main.go</description>
+    </rule>
+    <rule category="security">
+        <description>Store sensitive data using go-keyring</description>
+    </rule>
+    <rule category="error-handling">
+        <description>Handle all errors properly; do not ignore errors</description>
+    </rule>
+    <rule category="tooling">
+        <description>Use Mise for using/installing any tools such as the Go toolchain</description>
+    </rule>
+    <rule category="tooling">
+        <description>Use Just and a justfile as a CLI command runner</description>
+    </rule>
+</clinerules>

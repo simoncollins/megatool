@@ -4,7 +4,7 @@ MegaTool is a command-line tool that implements multiple Model Context Protocol 
 
 ## Features
 
-- **Multiple MCP Servers**: Each server runs as a separate binary (e.g., `megatool-github`, `megatool-calculator`).
+- **Multiple MCP Servers**: Each server runs as a separate binary (e.g., `megatool-github`, `megatool-calculator`, `megatool-package-version`).
 - **Dispatcher Architecture**: The main `megatool` binary dispatches to the appropriate MCP server binary.
 - **Secure Configuration**: Configuration for each server is managed via a `--configure` flag, with sensitive data (e.g., Personal Access Tokens) stored securely using the system keyring.
 - **MCP Communication**: MCP servers communicate with clients over stdio.
@@ -46,6 +46,7 @@ megatool <server> [flags]
 Where `<server>` is one of the available MCP servers:
 - `calculator`: Simple calculator MCP server
 - `github`: GitHub MCP server
+- `package-version`: Package version checker MCP server
 
 ### Calculator MCP Server
 
@@ -68,6 +69,26 @@ megatool github --configure
 megatool github
 ```
 
+### Package Version MCP Server
+
+The Package Version MCP server checks for the latest versions of packages from various package managers and registries.
+
+```bash
+# Run the package version MCP server
+megatool package-version
+```
+
+Supported package managers and registries:
+- NPM (Node.js)
+- PyPI (Python)
+- Maven and Gradle (Java)
+- Go Modules
+- Swift Packages
+- Docker Images
+- AWS Bedrock Models
+
+See the [Package Version README](cmd/megatool-package-version/README.md) for more details.
+
 ## Configuration
 
 Each MCP server can be configured using the `--configure` flag:
@@ -86,20 +107,33 @@ This will prompt for the necessary configuration values and store them securely.
 megatool/
 ├── cmd/
 │   ├── megatool/
-│   │   └── main.go          # Main entry point, dispatches to server binaries
+│   │   └── main.go                  # Main entry point, dispatches to server binaries
 │   ├── megatool-calculator/
-│   │   └── main.go          # Calculator MCP server implementation
-│   └── megatool-github/
-│       └── main.go          # GitHub MCP server implementation
+│   │   └── main.go                  # Calculator MCP server implementation
+│   ├── megatool-github/
+│   │   └── main.go                  # GitHub MCP server implementation
+│   └── megatool-package-version/
+│       ├── main.go                  # Package Version MCP server implementation
+│       ├── README.md                # Package Version MCP server documentation
+│       └── handlers/                # Package Version handlers
+│           ├── types.go             # Common types
+│           ├── utils.go             # Utility functions
+│           ├── npm.go               # NPM handler
+│           ├── python.go            # Python handler
+│           ├── java.go              # Java handler
+│           ├── go.go                # Go handler
+│           ├── bedrock.go           # AWS Bedrock handler
+│           ├── docker.go            # Docker handler
+│           └── swift.go             # Swift handler
 ├── internal/
 │   ├── config/
-│   │   └── config.go        # Configuration management
+│   │   └── config.go                # Configuration management
 │   └── utils/
-│       └── utils.go         # Shared utility functions
-├── go.mod                   # Go module definition
-├── go.sum                   # Go module checksums
-├── justfile                 # Just task runner definitions
-└── .mise.toml               # Mise configuration for Go toolchain
+│       └── utils.go                 # Shared utility functions
+├── go.mod                           # Go module definition
+├── go.sum                           # Go module checksums
+├── justfile                         # Just task runner definitions
+└── .mise.toml                       # Mise configuration for Go toolchain
 ```
 
 ### Development Tasks
@@ -127,6 +161,9 @@ just run-calculator
 
 # Run the GitHub MCP server (for development)
 just run-github
+
+# Run the Package Version MCP server (for development)
+just run-package-version
 
 # Configure the GitHub MCP server
 just configure-github

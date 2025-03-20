@@ -34,4 +34,7 @@
     <rule category="tooling">
         <description>Use Just and a justfile as a CLI command runner</description>
     </rule>
+    <rule category="documentation">
+        <description>Update documentation when code changes affect user-facing functionality</description>
+    </rule>
 </clinerules>

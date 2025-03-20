@@ -1,6 +1,6 @@
 # MegaTool
 
-MegaTool is a command-line tool that implements multiple Model Context Protocol (MCP) servers. Each MCP server is accessible via subcommands (e.g., `megatool github`, `megatool calculator`). The tool uses separate binaries for each MCP server and a main binary to dispatch to the correct one based on the subcommand.
+MegaTool is a command-line tool that implements multiple Model Context Protocol (MCP) servers. Each MCP server is accessible via the `run` subcommand (e.g., `megatool run github`, `megatool run calculator`). The tool uses separate binaries for each MCP server and a main binary to dispatch to the correct one based on the server name.
 
 ## Features
 
@@ -40,7 +40,7 @@ MegaTool is a command-line tool that implements multiple Model Context Protocol 
 ### Basic Usage
 
 ```bash
-megatool <server> [flags]
+megatool run <server> [flags]
 ```
 
 Where `<server>` is one of the available MCP servers:
@@ -54,7 +54,7 @@ The Calculator MCP server provides basic arithmetic operations.
 
 ```bash
 # Run the calculator MCP server
-megatool calculator
+megatool run calculator
 ```
 
 ### GitHub MCP Server
@@ -63,10 +63,10 @@ The GitHub MCP server provides information about GitHub repositories and users.
 
 ```bash
 # Configure the GitHub MCP server (required before first use)
-megatool github --configure
+megatool run github --configure
 
 # Run the GitHub MCP server
-megatool github
+megatool run github
 ```
 
 ### Package Version MCP Server
@@ -75,7 +75,7 @@ The Package Version MCP server checks for the latest versions of packages from v
 
 ```bash
 # Run the package version MCP server
-megatool package-version
+megatool run package-version
 ```
 
 Supported package managers and registries:
@@ -94,7 +94,7 @@ See the [Package Version README](cmd/megatool-package-version/README.md) for mor
 Each MCP server can be configured using the `--configure` flag:
 
 ```bash
-megatool <server> --configure
+megatool run <server> --configure
 ```
 
 This will prompt for the necessary configuration values and store them securely.

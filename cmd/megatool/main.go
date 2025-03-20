@@ -16,9 +16,7 @@ func printUsage() {
 	// Try to get available servers
 	servers, err := utils.GetAvailableServers()
 	if err != nil || len(servers) == 0 {
-		fmt.Println("  calculator    - Simple calculator MCP server")
-		fmt.Println("  github        - GitHub MCP server")
-		fmt.Println("  (No additional servers found)")
+		fmt.Println("  No servers found")
 	} else {
 		for _, server := range servers {
 			fmt.Printf("  %s\n", server)

@@ -22,6 +22,11 @@ var subcommands = []subcommand{
 		description: "Run an MCP server",
 		handler:     runCommand,
 	},
+	{
+		name:        "ls",
+		description: "List available MCP servers",
+		handler:     lsCommand,
+	},
 	// Future subcommands will be added here
 	// {name: "ps", description: "List running MCP servers", handler: psCommand},
 	// {name: "logs", description: "Show logs from MCP servers", handler: logsCommand},
@@ -39,26 +44,56 @@ func printUsage() {
 	fmt.Println("Run 'megatool <command> --help' for more information on a command.")
 }
 
+// listAvailableServers prints a list of available MCP servers with optional indentation
+func listAvailableServers(indent string) error {
+	// Get available servers
+	servers, err := utils.GetAvailableServers()
+	if err != nil {
+		return err
+	}
+
+	// Check if any servers were found
+	if len(servers) == 0 {
+		fmt.Println(indent + "No MCP servers available")
+		return nil
+	}
+
+	// Print each server on a separate line
+	for _, server := range servers {
+		fmt.Println(indent + server)
+	}
+
+	return nil
+}
+
 // printRunUsage prints usage information for the run command
 func printRunUsage() {
 	fmt.Println("Usage: megatool run <server> [flags]")
 	fmt.Println()
 	fmt.Println("Available servers:")
 
-	// Try to get available servers
-	servers, err := utils.GetAvailableServers()
-	if err != nil || len(servers) == 0 {
+	// Use the common function with indentation
+	err := listAvailableServers("  ")
+	if err != nil {
 		fmt.Println("  No servers found")
-	} else {
-		for _, server := range servers {
-			fmt.Printf("  %s\n", server)
-		}
 	}
 
 	fmt.Println()
 	fmt.Println("Flags:")
 	fmt.Println("  --configure    - Configure the server")
 	fmt.Println("  --help         - Show help for a server")
+}
+
+// lsCommand handles the 'ls' subcommand to list available MCP servers
+func lsCommand(args []string) error {
+	// Use the common function with no indentation
+	err := listAvailableServers("")
+	if err != nil {
+		utils.PrintError("Failed to get available servers: %v", err)
+		return err
+	}
+	
+	return nil
 }
 
 // runCommand handles the 'run' subcommand

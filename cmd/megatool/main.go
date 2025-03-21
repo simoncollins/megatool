@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/csv"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/megatool/internal/utils"
 )
@@ -27,8 +32,12 @@ var subcommands = []subcommand{
 		description: "List available MCP servers",
 		handler:     lsCommand,
 	},
+	{
+		name:        "ps",
+		description: "List running MCP servers",
+		handler:     psCommand,
+	},
 	// Future subcommands will be added here
-	// {name: "ps", description: "List running MCP servers", handler: psCommand},
 	// {name: "logs", description: "Show logs from MCP servers", handler: logsCommand},
 }
 
@@ -96,6 +105,212 @@ func lsCommand(args []string) error {
 	return nil
 }
 
+// printPsUsage prints usage information for the ps command
+func printPsUsage() {
+	fmt.Println("Usage: megatool ps [flags]")
+	fmt.Println()
+	fmt.Println("Flags:")
+	fmt.Println("  --format       - Output format (table, json, csv) [default: table]")
+	fmt.Println("  --fields       - Comma-separated list of fields to display [default: name,pid,uptime]")
+	fmt.Println("  --no-header    - Don't print header row")
+	fmt.Println("  --help         - Show this help")
+}
+
+// psCommand handles the 'ps' subcommand to list running MCP servers
+func psCommand(args []string) error {
+	// Parse flags
+	var format string
+	var fields string
+	var noHeader bool
+	var help bool
+	
+	// Define flags
+	psFlags := flag.NewFlagSet("ps", flag.ExitOnError)
+	psFlags.StringVar(&format, "format", "table", "Output format (table, json, csv)")
+	psFlags.StringVar(&fields, "fields", "name,pid,uptime", "Comma-separated list of fields to display")
+	psFlags.BoolVar(&noHeader, "no-header", false, "Don't print header row")
+	psFlags.BoolVar(&help, "help", false, "Show help")
+	
+	if err := psFlags.Parse(args); err != nil {
+		return err
+	}
+	
+	// Handle help flag
+	if help || (psFlags.NArg() > 0 && psFlags.Arg(0) == "--help") {
+		printPsUsage()
+		return nil
+	}
+	
+	// Read server records
+	records, err := utils.ReadServerRecords()
+	if err != nil {
+		utils.PrintError("Failed to read server records: %v", err)
+		return err
+	}
+	
+	// Clean up stale records and save back
+	activeRecords := utils.CleanupStaleRecords(records)
+	if len(activeRecords) != len(records) {
+		err = utils.WriteServerRecords(activeRecords)
+		if err != nil {
+			utils.PrintError("Failed to update server records: %v", err)
+		}
+		records = activeRecords
+	}
+	
+	// Format and display records
+	return displayServerRecords(records, format, fields, !noHeader)
+}
+
+// displayServerRecords formats and displays server records
+func displayServerRecords(records []utils.ServerRecord, format, fields string, showHeader bool) error {
+	// Split requested fields
+	fieldList := strings.Split(fields, ",")
+	
+	// Check if we have any records
+	if len(records) == 0 {
+		fmt.Println("No running MCP servers found")
+		return nil
+	}
+	
+	// Generate output based on format
+	switch format {
+	case "table":
+		return displayServerTable(records, fieldList, showHeader)
+	case "json":
+		return displayServerJSON(records, fieldList)
+	case "csv":
+		return displayServerCSV(records, fieldList, showHeader)
+	default:
+		return fmt.Errorf("unknown format: %s", format)
+	}
+}
+
+// displayServerTable displays server records in a table format
+func displayServerTable(records []utils.ServerRecord, fields []string, showHeader bool) error {
+	// Create a new tabwriter
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	
+	// Print header if requested
+	if showHeader {
+		var headers []string
+		for _, field := range fields {
+			switch field {
+			case "name":
+				headers = append(headers, "NAME")
+			case "pid":
+				headers = append(headers, "PID")
+			case "uptime":
+				headers = append(headers, "UPTIME")
+			default:
+				headers = append(headers, strings.ToUpper(field))
+			}
+		}
+		fmt.Fprintln(w, strings.Join(headers, "\t"))
+	}
+	
+	// Print each record
+	for _, record := range records {
+		var values []string
+		for _, field := range fields {
+			switch field {
+			case "name":
+				values = append(values, record.Name)
+			case "pid":
+				values = append(values, fmt.Sprintf("%d", record.PID))
+			case "uptime":
+				values = append(values, utils.FormatUptime(record.StartTime))
+			default:
+				values = append(values, "N/A")
+			}
+		}
+		fmt.Fprintln(w, strings.Join(values, "\t"))
+	}
+	
+	return w.Flush()
+}
+
+// displayServerJSON displays server records in JSON format
+func displayServerJSON(records []utils.ServerRecord, fields []string) error {
+	// Create a slice of maps for JSON output
+	var result []map[string]interface{}
+	
+	for _, record := range records {
+		item := make(map[string]interface{})
+		
+		for _, field := range fields {
+			switch field {
+			case "name":
+				item["name"] = record.Name
+			case "pid":
+				item["pid"] = record.PID
+			case "uptime":
+				item["uptime"] = utils.FormatUptime(record.StartTime)
+			}
+		}
+		
+		result = append(result, item)
+	}
+	
+	// Marshal to JSON
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return err
+	}
+	
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+// displayServerCSV displays server records in CSV format
+func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader bool) error {
+	// Create a new CSV writer
+	w := csv.NewWriter(os.Stdout)
+	
+	// Print header if requested
+	if showHeader {
+		var headers []string
+		for _, field := range fields {
+			switch field {
+			case "name":
+				headers = append(headers, "NAME")
+			case "pid":
+				headers = append(headers, "PID")
+			case "uptime":
+				headers = append(headers, "UPTIME")
+			default:
+				headers = append(headers, strings.ToUpper(field))
+			}
+		}
+		if err := w.Write(headers); err != nil {
+			return err
+		}
+	}
+	
+	// Print each record
+	for _, record := range records {
+		var values []string
+		for _, field := range fields {
+			switch field {
+			case "name":
+				values = append(values, record.Name)
+			case "pid":
+				values = append(values, fmt.Sprintf("%d", record.PID))
+			case "uptime":
+				values = append(values, utils.FormatUptime(record.StartTime))
+			default:
+				values = append(values, "N/A")
+			}
+		}
+		if err := w.Write(values); err != nil {
+			return err
+		}
+	}
+	
+	w.Flush()
+	return w.Error()
+}
+
 // runCommand handles the 'run' subcommand
 func runCommand(args []string) error {
 	// Check if we have enough arguments
@@ -159,9 +374,20 @@ func executeMcpServer(serverName string, args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	// Run the command
-	err = cmd.Run()
-	if err != nil {
+	// Start the command (instead of Run)
+	if err := cmd.Start(); err != nil {
+		utils.PrintError("Failed to start %s: %v", binaryName, err)
+		return err
+	}
+
+	// Record the PID
+	if err := utils.AddServerRecord(serverName, cmd.Process.Pid); err != nil {
+		utils.PrintError("Failed to record server process: %v", err)
+		// Continue anyway, this is not fatal
+	}
+
+	// Wait for the command to complete
+	if err := cmd.Wait(); err != nil {
 		// If the command returned an error, exit with the same code
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())

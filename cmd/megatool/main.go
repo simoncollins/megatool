@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -36,6 +37,11 @@ var subcommands = []subcommand{
 		name:        "ps",
 		description: "List running MCP servers",
 		handler:     psCommand,
+	},
+	{
+		name:        "stop",
+		description: "Stop a running MCP server",
+		handler:     stopCommand,
 	},
 	// Future subcommands will be added here
 	// {name: "logs", description: "Show logs from MCP servers", handler: logsCommand},
@@ -209,13 +215,27 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 		fmt.Fprintln(w, strings.Join(headers, "\t"))
 	}
 	
+	// Count instances of each server
+	serverCounts := make(map[string]int)
+	for _, record := range records {
+		serverCounts[record.Name]++
+	}
+	
 	// Print each record
 	for _, record := range records {
 		var values []string
 		for _, field := range fields {
 			switch field {
 			case "name":
-				values = append(values, record.Name)
+				// Add instance indicator if there are multiple instances
+				if serverCounts[record.Name] > 1 {
+					values = append(values, fmt.Sprintf("%s (instance %d of %d)", 
+						record.Name, 
+						getInstanceNumber(records, record),
+						serverCounts[record.Name]))
+				} else {
+					values = append(values, record.Name)
+				}
 			case "pid":
 				values = append(values, fmt.Sprintf("%d", record.PID))
 			case "uptime":
@@ -230,10 +250,42 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 	return w.Flush()
 }
 
+// getInstanceNumber returns the instance number of a record among records with the same name
+// sorted by start time (oldest first)
+func getInstanceNumber(records []utils.ServerRecord, target utils.ServerRecord) int {
+	// Filter records with the same name
+	var sameNameRecords []utils.ServerRecord
+	for _, record := range records {
+		if record.Name == target.Name {
+			sameNameRecords = append(sameNameRecords, record)
+		}
+	}
+	
+	// Sort by start time (oldest first)
+	sort.Slice(sameNameRecords, func(i, j int) bool {
+		return sameNameRecords[i].StartTime.Before(sameNameRecords[j].StartTime)
+	})
+	
+	// Find the index of the target record
+	for i, record := range sameNameRecords {
+		if record.PID == target.PID {
+			return i + 1
+		}
+	}
+	
+	return 0 // Should not happen
+}
+
 // displayServerJSON displays server records in JSON format
 func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 	// Create a slice of maps for JSON output
 	var result []map[string]interface{}
+	
+	// Count instances of each server
+	serverCounts := make(map[string]int)
+	for _, record := range records {
+		serverCounts[record.Name]++
+	}
 	
 	for _, record := range records {
 		item := make(map[string]interface{})
@@ -241,7 +293,14 @@ func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 		for _, field := range fields {
 			switch field {
 			case "name":
-				item["name"] = record.Name
+				// Add instance information if there are multiple instances
+				if serverCounts[record.Name] > 1 {
+					item["name"] = record.Name
+					item["instance_number"] = getInstanceNumber(records, record)
+					item["total_instances"] = serverCounts[record.Name]
+				} else {
+					item["name"] = record.Name
+				}
 			case "pid":
 				item["pid"] = record.PID
 			case "uptime":
@@ -259,6 +318,165 @@ func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 	}
 	
 	fmt.Println(string(jsonData))
+	return nil
+}
+
+// printStopUsage prints usage information for the stop command
+func printStopUsage() {
+	fmt.Println("Usage: megatool stop <server> [flags]")
+	fmt.Println()
+	fmt.Println("Stop a running MCP server gracefully.")
+	fmt.Println()
+	fmt.Println("Arguments:")
+	fmt.Println("  <server>      - Name of the MCP server to stop")
+	fmt.Println()
+	fmt.Println("Flags:")
+	fmt.Println("  --all          - Stop all instances of the specified server")
+	fmt.Println("  --pid <pid>    - Stop a specific instance by PID")
+	fmt.Println("  --help         - Show this help")
+	fmt.Println()
+	fmt.Println("Running servers:")
+	
+	// Get running servers
+	records, err := utils.ReadServerRecords()
+	if err != nil {
+		fmt.Println("  Error reading server records")
+		return
+	}
+	
+	// Clean up stale records
+	records = utils.CleanupStaleRecords(records)
+	
+	// Check if any servers are running
+	if len(records) == 0 {
+		fmt.Println("  No running MCP servers found")
+		return
+	}
+	
+	// Count instances of each server
+	serverCounts := make(map[string]int)
+	for _, record := range records {
+		serverCounts[record.Name]++
+	}
+	
+	// Print each running server
+	for _, record := range records {
+		if serverCounts[record.Name] > 1 {
+			fmt.Printf("  %s (instance %d of %d, PID: %d, Uptime: %s)\n", 
+				record.Name,
+				getInstanceNumber(records, record),
+				serverCounts[record.Name],
+				record.PID, 
+				utils.FormatUptime(record.StartTime))
+		} else {
+			fmt.Printf("  %s (PID: %d, Uptime: %s)\n", 
+				record.Name, 
+				record.PID, 
+				utils.FormatUptime(record.StartTime))
+		}
+	}
+}
+
+// stopCommand handles the 'stop' subcommand to terminate a running MCP server
+func stopCommand(args []string) error {
+	// Parse flags
+	var all bool
+	var pid int
+	var help bool
+	
+	// Define flags
+	stopFlags := flag.NewFlagSet("stop", flag.ExitOnError)
+	stopFlags.BoolVar(&all, "all", false, "Stop all instances of the specified server")
+	stopFlags.IntVar(&pid, "pid", 0, "Stop a specific instance by PID")
+	stopFlags.BoolVar(&help, "help", false, "Show help")
+	
+	if err := stopFlags.Parse(args); err != nil {
+		return err
+	}
+	
+	// Handle help flag
+	if help || len(args) == 0 || (stopFlags.NArg() == 0 && pid == 0) {
+		printStopUsage()
+		return nil
+	}
+	
+	// Get the server name from the first non-flag argument
+	var serverName string
+	if stopFlags.NArg() > 0 {
+		serverName = stopFlags.Arg(0)
+	}
+	
+	// Read server records
+	records, err := utils.ReadServerRecords()
+	if err != nil {
+		utils.PrintError("Failed to read server records: %v", err)
+		return err
+	}
+	
+	// Clean up stale records
+	records = utils.CleanupStaleRecords(records)
+	
+	// Find matching server records
+	var matchingRecords []utils.ServerRecord
+	var remainingRecords []utils.ServerRecord
+	
+	for _, record := range records {
+		if (serverName != "" && record.Name == serverName) || (pid > 0 && record.PID == pid) {
+			matchingRecords = append(matchingRecords, record)
+		} else {
+			remainingRecords = append(remainingRecords, record)
+		}
+	}
+	
+	// Check if any matching servers were found
+	if len(matchingRecords) == 0 {
+		if serverName != "" {
+			utils.PrintError("Server '%s' not found or not running", serverName)
+		} else if pid > 0 {
+			utils.PrintError("Process with PID %d not found or not an MCP server", pid)
+		} else {
+			utils.PrintError("No server specified")
+		}
+		
+		if len(records) > 0 {
+			utils.PrintInfo("Run 'megatool ps' to see running servers")
+		}
+		return fmt.Errorf("server not found")
+	}
+	
+	// Handle multiple instances
+	if len(matchingRecords) > 1 && !all && pid == 0 {
+		utils.PrintInfo("Multiple instances of server '%s' are running:", serverName)
+		for i, record := range matchingRecords {
+			utils.PrintInfo("  %d. PID: %d, Uptime: %s", i+1, record.PID, utils.FormatUptime(record.StartTime))
+		}
+		utils.PrintInfo("Use --pid to specify which instance to stop, or --all to stop all instances")
+		return fmt.Errorf("multiple instances found")
+	}
+	
+	// Stop the matching servers
+	stoppedCount := 0
+	for _, record := range matchingRecords {
+		if err := utils.TerminateProcess(record.PID); err != nil {
+			utils.PrintError("Failed to stop server '%s' (PID: %d): %v", record.Name, record.PID, err)
+			continue
+		}
+		stoppedCount++
+		utils.PrintInfo("Server '%s' (PID: %d) stopped successfully", record.Name, record.PID)
+	}
+	
+	// Update the server records
+	if err := utils.WriteServerRecords(remainingRecords); err != nil {
+		utils.PrintError("Failed to update server records: %v", err)
+		// Continue anyway, this is not fatal
+	}
+	
+	if stoppedCount > 0 && stoppedCount < len(matchingRecords) {
+		utils.PrintInfo("Stopped %d of %d instances", stoppedCount, len(matchingRecords))
+	} else if stoppedCount > 1 {
+		utils.PrintInfo("All %d instances stopped successfully", stoppedCount)
+	}
+	
 	return nil
 }
 
@@ -287,13 +505,27 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 		}
 	}
 	
+	// Count instances of each server
+	serverCounts := make(map[string]int)
+	for _, record := range records {
+		serverCounts[record.Name]++
+	}
+	
 	// Print each record
 	for _, record := range records {
 		var values []string
 		for _, field := range fields {
 			switch field {
 			case "name":
-				values = append(values, record.Name)
+				// Add instance indicator if there are multiple instances
+				if serverCounts[record.Name] > 1 {
+					values = append(values, fmt.Sprintf("%s (instance %d of %d)", 
+						record.Name, 
+						getInstanceNumber(records, record),
+						serverCounts[record.Name]))
+				} else {
+					values = append(values, record.Name)
+				}
 			case "pid":
 				values = append(values, fmt.Sprintf("%d", record.PID))
 			case "uptime":

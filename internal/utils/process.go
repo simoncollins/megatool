@@ -1,9 +1,25 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
+
+// TerminateProcess sends a SIGTERM signal to gracefully terminate a process
+func TerminateProcess(pid int) error {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("process not found: %w", err)
+	}
+
+	// Send SIGTERM for graceful termination
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("failed to terminate process: %w", err)
+	}
+
+	return nil
+}
 
 // IsProcessRunning checks if a process with the given PID is still running
 func IsProcessRunning(pid int) bool {

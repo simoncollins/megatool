@@ -15,7 +15,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/megatool/internal/config"
-	"github.com/spf13/pflag"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -24,162 +24,161 @@ const (
 )
 
 func main() {
-	// Parse command line flags
-	var configureMode bool
-	var showHelp bool
-	pflag.BoolVarP(&configureMode, "configure", "c", false, "Configure GitHub MCP server")
-	pflag.BoolVarP(&showHelp, "help", "h", false, "Show help")
-	pflag.Parse()
-
-	// Show help if requested
-	if showHelp {
-		fmt.Println("MegaTool GitHub MCP Server")
-		fmt.Println()
-		fmt.Println("Usage: megatool github [flags]")
-		fmt.Println()
-		fmt.Println("Flags:")
-		fmt.Println("  --configure, -c    Configure the GitHub MCP server")
-		fmt.Println("  --help, -h         Show this help message")
-		os.Exit(0)
-	}
-
-	// Handle configuration mode
-	if configureMode {
-		if err := configureGitHub(); err != nil {
-			fmt.Fprintf(os.Stderr, "Configuration failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("GitHub MCP server configured successfully")
-		os.Exit(0)
-	}
-
-	// Load configuration
-	_, err := config.Load("github")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Run 'megatool github --configure' to configure the GitHub MCP server\n")
-		os.Exit(1)
-	}
-
-	// Get GitHub PAT from keyring
-	pat, err := config.GetSecure("github", "pat")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error retrieving GitHub PAT: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Run 'megatool github --configure' to reconfigure the GitHub MCP server\n")
-		os.Exit(1)
-	}
-
-	// Create a new MCP server
-	s := server.NewMCPServer(
-		"MegaTool GitHub",
-		"1.0.0",
-		server.WithResourceCapabilities(true, true),
-		server.WithToolCapabilities(true),
-		server.WithLogging(),
-	)
-
-	// Add resource template for repository information
-	repoTemplate := mcp.NewResourceTemplate(
-		"github://repos/{owner}/{repo}",
-		"GitHub Repository Information",
-		mcp.WithTemplateDescription("Information about a GitHub repository"),
-		mcp.WithTemplateMIMEType("application/json"),
-	)
-
-	// Add resource template handler
-	s.AddResourceTemplate(repoTemplate, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		// Extract owner and repo from URI
-		regex := regexp.MustCompile(`github://repos/([^/]+)/([^/]+)`)
-		matches := regex.FindStringSubmatch(request.Params.URI)
-		if len(matches) != 3 {
-			return nil, fmt.Errorf("invalid repository URI format")
-		}
-
-		owner := matches[1]
-		repo := matches[2]
-
-		// Make GitHub API request
-		repoInfo, err := getRepositoryInfo(pat, owner, repo)
-		if err != nil {
-			return nil, err
-		}
-
-		// Return resource contents
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				URI:      request.Params.URI,
-				MIMEType: "application/json",
-				Text:     repoInfo,
+	app := &cli.App{
+		Name:  "megatool-github",
+		Usage: "MegaTool GitHub MCP Server",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "configure",
+				Aliases: []string{"c"},
+				Usage:   "Configure GitHub MCP server",
 			},
-		}, nil
-	})
+		},
+		Action: func(c *cli.Context) error {
+			// Handle configuration mode
+			if c.Bool("configure") {
+				if err := configureGitHub(); err != nil {
+					return fmt.Errorf("configuration failed: %w", err)
+				}
+				fmt.Println("GitHub MCP server configured successfully")
+				return nil
+			}
 
-	// Add tool for searching repositories
-	searchReposTool := mcp.NewTool("search_repos",
-		mcp.WithDescription("Search for GitHub repositories"),
-		mcp.WithString("query",
-			mcp.Required(),
-			mcp.Description("Search query"),
-		),
-		mcp.WithNumber("limit",
-			mcp.Description("Maximum number of results to return"),
-		),
-	)
+			// Load configuration
+			_, err := config.Load("github")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Run 'megatool github --configure' to configure the GitHub MCP server\n")
+				return err
+			}
 
-	// Add tool handler for searching repositories
-	s.AddTool(searchReposTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Extract parameters
-		query, ok := request.Params.Arguments["query"].(string)
-		if !ok {
-			return mcp.NewToolResultError("query must be a string"), nil
-		}
+			// Get GitHub PAT from keyring
+			pat, err := config.GetSecure("github", "pat")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error retrieving GitHub PAT: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Run 'megatool github --configure' to reconfigure the GitHub MCP server\n")
+				return err
+			}
 
-		var limit int = 10
-		if limitVal, ok := request.Params.Arguments["limit"].(float64); ok {
-			limit = int(limitVal)
-		}
+			// Create a new MCP server
+			s := server.NewMCPServer(
+				"MegaTool GitHub",
+				"1.0.0",
+				server.WithResourceCapabilities(true, true),
+				server.WithToolCapabilities(true),
+				server.WithLogging(),
+			)
 
-		// Search repositories
-		results, err := searchRepositories(pat, query, limit)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to search repositories: %v", err)), nil
-		}
+			// Add resource template for repository information
+			repoTemplate := mcp.NewResourceTemplate(
+				"github://repos/{owner}/{repo}",
+				"GitHub Repository Information",
+				mcp.WithTemplateDescription("Information about a GitHub repository"),
+				mcp.WithTemplateMIMEType("application/json"),
+			)
 
-		// Return results
-		return mcp.NewToolResultText(results), nil
-	})
+			// Add resource template handler
+			s.AddResourceTemplate(repoTemplate, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+				// Extract owner and repo from URI
+				regex := regexp.MustCompile(`github://repos/([^/]+)/([^/]+)`)
+				matches := regex.FindStringSubmatch(request.Params.URI)
+				if len(matches) != 3 {
+					return nil, fmt.Errorf("invalid repository URI format")
+				}
 
-	// Add tool for getting user information
-	userInfoTool := mcp.NewTool("get_user",
-		mcp.WithDescription("Get information about a GitHub user"),
-		mcp.WithString("username",
-			mcp.Required(),
-			mcp.Description("GitHub username"),
-		),
-	)
+				owner := matches[1]
+				repo := matches[2]
 
-	// Add tool handler for getting user information
-	s.AddTool(userInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Extract parameters
-		username, ok := request.Params.Arguments["username"].(string)
-		if !ok {
-			return mcp.NewToolResultError("username must be a string"), nil
-		}
+				// Make GitHub API request
+				repoInfo, err := getRepositoryInfo(pat, owner, repo)
+				if err != nil {
+					return nil, err
+				}
 
-		// Get user information
-		userInfo, err := getUserInfo(pat, username)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to get user information: %v", err)), nil
-		}
+				// Return resource contents
+				return []mcp.ResourceContents{
+					mcp.TextResourceContents{
+						URI:      request.Params.URI,
+						MIMEType: "application/json",
+						Text:     repoInfo,
+					},
+				}, nil
+			})
 
-		// Return results
-		return mcp.NewToolResultText(userInfo), nil
-	})
+			// Add tool for searching repositories
+			searchReposTool := mcp.NewTool("search_repos",
+				mcp.WithDescription("Search for GitHub repositories"),
+				mcp.WithString("query",
+					mcp.Required(),
+					mcp.Description("Search query"),
+				),
+				mcp.WithNumber("limit",
+					mcp.Description("Maximum number of results to return"),
+				),
+			)
 
-	// Start the server
-	fmt.Fprintln(os.Stderr, "Starting MegaTool GitHub MCP Server...")
-	if err := server.ServeStdio(s); err != nil {
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			// Add tool handler for searching repositories
+			s.AddTool(searchReposTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				// Extract parameters
+				query, ok := request.Params.Arguments["query"].(string)
+				if !ok {
+					return mcp.NewToolResultError("query must be a string"), nil
+				}
+
+				var limit int = 10
+				if limitVal, ok := request.Params.Arguments["limit"].(float64); ok {
+					limit = int(limitVal)
+				}
+
+				// Search repositories
+				results, err := searchRepositories(pat, query, limit)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to search repositories: %v", err)), nil
+				}
+
+				// Return results
+				return mcp.NewToolResultText(results), nil
+			})
+
+			// Add tool for getting user information
+			userInfoTool := mcp.NewTool("get_user",
+				mcp.WithDescription("Get information about a GitHub user"),
+				mcp.WithString("username",
+					mcp.Required(),
+					mcp.Description("GitHub username"),
+				),
+			)
+
+			// Add tool handler for getting user information
+			s.AddTool(userInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				// Extract parameters
+				username, ok := request.Params.Arguments["username"].(string)
+				if !ok {
+					return mcp.NewToolResultError("username must be a string"), nil
+				}
+
+				// Get user information
+				userInfo, err := getUserInfo(pat, username)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("Failed to get user information: %v", err)), nil
+				}
+
+				// Return results
+				return mcp.NewToolResultText(userInfo), nil
+			})
+
+			// Start the server
+			fmt.Fprintln(os.Stderr, "Starting MegaTool GitHub MCP Server...")
+			if err := server.ServeStdio(s); err != nil {
+				return fmt.Errorf("server error: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

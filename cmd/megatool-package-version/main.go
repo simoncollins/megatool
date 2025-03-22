@@ -10,7 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/megatool/cmd/megatool-package-version/handlers"
-	"github.com/spf13/pflag"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -63,48 +63,44 @@ func (c *Cache) Set(key string, val interface{}) {
 }
 
 func main() {
-	// Parse command line flags
-	var showHelp bool
-	pflag.BoolVarP(&showHelp, "help", "h", false, "Show help")
-	pflag.Parse()
+	app := &cli.App{
+		Name:  "megatool-package-version",
+		Usage: "MegaTool Package Version MCP Server",
+		Action: func(c *cli.Context) error {
+			// Create a new MCP server
+			s := server.NewMCPServer(
+				"MegaTool Package Version",
+				"1.0.0",
+				server.WithToolCapabilities(true),
+				server.WithLogging(),
+			)
 
-	// Show help if requested
-	if showHelp {
-		fmt.Println("MegaTool Package Version MCP Server")
-		fmt.Println()
-		fmt.Println("Usage: megatool-package-version [flags]")
-		fmt.Println()
-		fmt.Println("Flags:")
-		fmt.Println("  --help, -h    Show this help message")
-		os.Exit(0)
+			// Create a shared cache for all handlers
+			cache := NewCache(CacheTTL)
+			// Create a shared sync.Map for thread-safe caching
+			sharedCache := &sync.Map{}
+
+			// Register tools and handlers
+			registerNpmTool(s, cache, sharedCache)
+			registerPythonTools(s, cache, sharedCache)
+			registerJavaTools(s, cache, sharedCache)
+			registerGoTool(s, cache, sharedCache)
+			registerBedrockTools(s, cache, sharedCache)
+			registerDockerTool(s, cache, sharedCache)
+			registerSwiftTool(s, cache, sharedCache)
+
+			// Start the server
+			fmt.Fprintln(os.Stderr, "Starting MegaTool Package Version MCP Server...")
+			if err := server.ServeStdio(s); err != nil {
+				return fmt.Errorf("server error: %w", err)
+			}
+
+			return nil
+		},
 	}
 
-	// Create a new MCP server
-	s := server.NewMCPServer(
-		"MegaTool Package Version",
-		"1.0.0",
-		server.WithToolCapabilities(true),
-		server.WithLogging(),
-	)
-
-	// Create a shared cache for all handlers
-	cache := NewCache(CacheTTL)
-	// Create a shared sync.Map for thread-safe caching
-	sharedCache := &sync.Map{}
-
-	// Register tools and handlers
-	registerNpmTool(s, cache, sharedCache)
-	registerPythonTools(s, cache, sharedCache)
-	registerJavaTools(s, cache, sharedCache)
-	registerGoTool(s, cache, sharedCache)
-	registerBedrockTools(s, cache, sharedCache)
-	registerDockerTool(s, cache, sharedCache)
-	registerSwiftTool(s, cache, sharedCache)
-
-	// Start the server
-	fmt.Fprintln(os.Stderr, "Starting MegaTool Package Version MCP Server...")
-	if err := server.ServeStdio(s); err != nil {
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

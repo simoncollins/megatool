@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -21,19 +22,18 @@ const (
 type SwiftHandler struct {
 	client HTTPClient
 	cache  *sync.Map
+	logger *logrus.Logger
 }
 
 // NewSwiftHandler creates a new Swift handler
-func NewSwiftHandler(client HTTPClient, cache *sync.Map) *SwiftHandler {
-	if client == nil {
-		client = DefaultHTTPClient
-	}
+func NewSwiftHandler(logger *logrus.Logger, cache *sync.Map) *SwiftHandler {
 	if cache == nil {
 		cache = &sync.Map{}
 	}
 	return &SwiftHandler{
-		client: client,
+		client: DefaultHTTPClient,
 		cache:  cache,
+		logger: logger,
 	}
 }
 
@@ -47,20 +47,50 @@ type GitHubRelease struct {
 
 // extractGitHubInfo extracts owner and repo from a GitHub URL
 func (h *SwiftHandler) extractGitHubInfo(packageURL string) (owner, repo string, isGitHub bool) {
+	if h.logger != nil {
+		h.logger.WithField("packageURL", packageURL).Debug("Extracting GitHub info from URL")
+	}
+
 	// Check if it's a GitHub URL
 	re := regexp.MustCompile(`github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?$`)
 	matches := re.FindStringSubmatch(packageURL)
 	if len(matches) != 3 {
+		if h.logger != nil {
+			h.logger.WithField("packageURL", packageURL).Debug("Not a GitHub URL")
+		}
 		return "", "", false
 	}
+
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"packageURL": packageURL,
+			"owner":      matches[1],
+			"repo":       matches[2],
+		}).Debug("Successfully extracted GitHub info")
+	}
+
 	return matches[1], matches[2], true
 }
 
 // getGitHubReleases gets the releases for a GitHub repository
 func (h *SwiftHandler) getGitHubReleases(owner, repo string) ([]GitHubRelease, error) {
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"owner": owner,
+			"repo":  repo,
+		}).Debug("Getting GitHub releases")
+	}
+
 	// Check cache first
 	cacheKey := fmt.Sprintf("github-releases:%s/%s", owner, repo)
 	if cachedReleases, ok := h.cache.Load(cacheKey); ok {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"owner":       owner,
+				"repo":        repo,
+				"releaseCount": len(cachedReleases.([]GitHubRelease)),
+			}).Debug("Using cached GitHub releases")
+		}
 		return cachedReleases.([]GitHubRelease), nil
 	}
 
@@ -73,16 +103,45 @@ func (h *SwiftHandler) getGitHubReleases(owner, repo string) ([]GitHubRelease, e
 		headers["Authorization"] = "token " + token
 	}
 
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"url":     releasesURL,
+			"hasAuth": len(headers) > 0,
+		}).Debug("Making GitHub API request")
+	}
+
 	// Make request
-	body, err := MakeRequest(h.client, "GET", releasesURL, headers)
+	body, err := MakeRequestWithLogger(h.client, h.logger, "GET", releasesURL, headers)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"owner": owner,
+				"repo":  repo,
+				"error": err.Error(),
+			}).Error("Failed to get GitHub releases")
+		}
 		return nil, fmt.Errorf("failed to get GitHub releases: %w", err)
 	}
 
 	// Parse response
 	var releases []GitHubRelease
 	if err := json.Unmarshal(body, &releases); err != nil {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"owner": owner,
+				"repo":  repo,
+				"error": err.Error(),
+			}).Error("Failed to parse GitHub releases response")
+		}
 		return nil, fmt.Errorf("failed to parse GitHub releases response: %w", err)
+	}
+
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"owner":       owner,
+			"repo":        repo,
+			"releaseCount": len(releases),
+		}).Debug("Successfully got GitHub releases")
 	}
 
 	// Cache the result
@@ -93,12 +152,25 @@ func (h *SwiftHandler) getGitHubReleases(owner, repo string) ([]GitHubRelease, e
 
 // getGitHubToken gets a GitHub token from environment variables
 func (h *SwiftHandler) getGitHubToken() string {
+	if h.logger != nil {
+		h.logger.Debug("Getting GitHub token")
+	}
+
 	// GitHub token would typically be provided via environment variables
 	return "" // TODO: Implement token retrieval if needed
 }
 
 // getPackageVersion gets the latest version of a Swift package
 func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement string, constraint *VersionConstraint) (*PackageVersion, error) {
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"packageURL":     packageURL,
+			"currentVersion": currentVersion,
+			"requirement":    requirement,
+			"hasConstraint":  constraint != nil,
+		}).Debug("Getting Swift package version")
+	}
+
 	// Extract package name from URL
 	packageName := packageURL
 	if idx := strings.LastIndex(packageURL, "/"); idx != -1 {
@@ -108,6 +180,12 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 
 	// Check if package should be excluded
 	if constraint != nil && constraint.ExcludePackage {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"packageURL": packageURL,
+				"packageName": packageName,
+			}).Debug("Package excluded from updates")
+		}
 		return &PackageVersion{
 			Name:           packageName,
 			CurrentVersion: StringPtr(currentVersion),
@@ -121,6 +199,12 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 	// For GitHub repositories, we can use the GitHub API to get the latest release
 	owner, repo, isGitHub := h.extractGitHubInfo(packageURL)
 	if !isGitHub {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"packageURL":  packageURL,
+				"packageName": packageName,
+			}).Debug("Non-GitHub repository, cannot determine latest version")
+		}
 		// For non-GitHub repositories, we can't easily determine the latest version
 		return &PackageVersion{
 			Name:           packageName,
@@ -139,6 +223,14 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 	}
 
 	if len(releases) == 0 {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"packageURL":  packageURL,
+				"packageName": packageName,
+				"owner":       owner,
+				"repo":        repo,
+			}).Error("No releases found for package")
+		}
 		return nil, fmt.Errorf("no releases found for package %s", packageName)
 	}
 
@@ -153,6 +245,12 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 
 	// If no stable release is found, use the latest release
 	if latestRelease == nil {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"packageURL":  packageURL,
+				"packageName": packageName,
+			}).Debug("No stable release found, using latest release")
+		}
 		latestRelease = &releases[0]
 	}
 
@@ -162,10 +260,26 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 		latestVersion = latestVersion[1:]
 	}
 
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"packageURL":    packageURL,
+			"packageName":   packageName,
+			"latestVersion": latestVersion,
+		}).Debug("Found latest version")
+	}
+
 	// If major version constraint exists, check if the latest version complies
 	if constraint != nil && constraint.MajorVersion != nil {
 		targetMajor := *constraint.MajorVersion
 		constrainedReleases := make([]GitHubRelease, 0)
+
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"packageURL":   packageURL,
+				"packageName":  packageName,
+				"majorVersion": targetMajor,
+			}).Debug("Applying major version constraint")
+		}
 
 		for _, release := range releases {
 			version := release.TagName
@@ -175,6 +289,12 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 
 			major, _, _, err := ParseVersion(version)
 			if err != nil {
+				if h.logger != nil {
+					h.logger.WithFields(logrus.Fields{
+						"version": version,
+						"error":   err.Error(),
+					}).Debug("Failed to parse version")
+				}
 				continue
 			}
 
@@ -206,6 +326,23 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 			if strings.HasPrefix(latestVersion, "v") {
 				latestVersion = latestVersion[1:]
 			}
+
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"packageURL":    packageURL,
+					"packageName":   packageName,
+					"majorVersion":  targetMajor,
+					"latestVersion": latestVersion,
+				}).Debug("Found latest version matching major version constraint")
+			}
+		} else {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"packageURL":   packageURL,
+					"packageName":  packageName,
+					"majorVersion": targetMajor,
+				}).Warn("No releases found matching major version constraint")
+			}
 		}
 	}
 
@@ -229,6 +366,10 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 
 // GetLatestVersion gets the latest versions for Swift packages
 func (h *SwiftHandler) GetLatestVersion(ctx context.Context, args interface{}) (*mcp.CallToolResult, error) {
+	if h.logger != nil {
+		h.logger.Info("Processing Swift version check request")
+	}
+
 	// Parse arguments
 	var params struct {
 		Dependencies []struct {
@@ -242,15 +383,31 @@ func (h *SwiftHandler) GetLatestVersion(ctx context.Context, args interface{}) (
 	// Convert args to JSON and back to ensure proper type conversion
 	jsonData, err := json.Marshal(args)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to marshal arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal arguments: %v", err)), nil
 	}
 
 	if err := json.Unmarshal(jsonData, &params); err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to parse arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse arguments: %v", err)), nil
 	}
 
 	if params.Dependencies == nil {
+		if h.logger != nil {
+			h.logger.Error("Dependencies array is required")
+		}
 		return mcp.NewToolResultError("Dependencies array is required"), nil
+	}
+
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"dependencyCount": len(params.Dependencies),
+			"hasConstraints":  params.Constraints != nil,
+		}).Debug("Processing Swift version check request")
 	}
 
 	// Parse constraints
@@ -259,15 +416,35 @@ func (h *SwiftHandler) GetLatestVersion(ctx context.Context, args interface{}) (
 		for pkg, c := range params.Constraints {
 			constraintData, err := json.Marshal(c)
 			if err != nil {
+				if h.logger != nil {
+					h.logger.WithFields(logrus.Fields{
+						"package": pkg,
+						"error":   err.Error(),
+					}).Warn("Failed to marshal constraint")
+				}
 				continue
 			}
 
 			var constraint VersionConstraint
 			if err := json.Unmarshal(constraintData, &constraint); err != nil {
+				if h.logger != nil {
+					h.logger.WithFields(logrus.Fields{
+						"package": pkg,
+						"error":   err.Error(),
+					}).Warn("Failed to parse constraint")
+				}
 				continue
 			}
 
 			constraints[pkg] = &constraint
+
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"package":        pkg,
+					"majorVersion":   constraint.MajorVersion,
+					"excludePackage": constraint.ExcludePackage,
+				}).Debug("Parsed constraint")
+			}
 		}
 	}
 
@@ -275,7 +452,18 @@ func (h *SwiftHandler) GetLatestVersion(ctx context.Context, args interface{}) (
 	results := make([]*PackageVersion, 0, len(params.Dependencies))
 	for _, dep := range params.Dependencies {
 		if dep.URL == "" {
+			if h.logger != nil {
+				h.logger.Debug("Skipping dependency with empty URL")
+			}
 			continue
+		}
+
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"url":         dep.URL,
+				"version":     dep.Version,
+				"requirement": dep.Requirement,
+			}).Debug("Checking Swift package version")
 		}
 
 		var constraint *VersionConstraint
@@ -285,11 +473,21 @@ func (h *SwiftHandler) GetLatestVersion(ctx context.Context, args interface{}) (
 
 		result, err := h.getPackageVersion(dep.URL, dep.Version, dep.Requirement, constraint)
 		if err != nil {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"url":   dep.URL,
+					"error": err.Error(),
+				}).Error("Error checking Swift package")
+			}
 			fmt.Printf("Error checking Swift package %s: %v\n", dep.URL, err)
 			continue
 		}
 
 		results = append(results, result)
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("resultCount", len(results)).Info("Completed Swift version check")
 	}
 
 	// Return results

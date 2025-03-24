@@ -10,6 +10,7 @@ import (
 // setupCommands returns the CLI commands for the application
 func setupCommands() []*cli.Command {
 	return []*cli.Command{
+		logsCommand(),
 		{
 			Name:  "run",
 			Usage: "Run an MCP server",
@@ -321,6 +322,7 @@ AUTHOR:
    {{range .Authors}}{{ . }}{{end}}
    {{end}}{{if .Commands}}
 COMMANDS:
+   logs        View MCP server logs
    run         Run an MCP server
    ls          List available MCP servers
    ps          List running MCP servers

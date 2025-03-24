@@ -10,6 +10,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/megatool/cmd/megatool-package-version/handlers"
+	"github.com/megatool/internal/logging"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
@@ -17,6 +19,9 @@ const (
 	// CacheTTL is the time-to-live for cached data (1 hour)
 	CacheTTL = 1 * time.Hour
 )
+
+// logger is the global logger instance
+var logger *logrus.Logger
 
 // Cache provides a simple in-memory cache with expiration
 type Cache struct {
@@ -63,6 +68,24 @@ func (c *Cache) Set(key string, val interface{}) {
 }
 
 func main() {
+	// Initialize logger
+	pid := os.Getpid()
+	log, err := logging.NewLogger("package-version", pid)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		// Continue with a default logger
+		logger = logrus.New()
+		logger.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
+		})
+	} else {
+		logger = log.Logger
+	}
+
+	logger.WithFields(logrus.Fields{
+		"pid": pid,
+	}).Info("Starting package-version MCP server")
+
 	app := &cli.App{
 		Name:  "megatool-package-version",
 		Usage: "MegaTool Package Version MCP Server",
@@ -72,13 +95,18 @@ func main() {
 				"MegaTool Package Version",
 				"1.0.0",
 				server.WithToolCapabilities(true),
-				server.WithLogging(),
+				// Don't use the built-in logging since we have our own
+				// server.WithLogging(),
 			)
+
+			logger.Info("Initialized MCP server")
 
 			// Create a shared cache for all handlers
 			cache := NewCache(CacheTTL)
 			// Create a shared sync.Map for thread-safe caching
 			sharedCache := &sync.Map{}
+
+			logger.Info("Initializing package version handlers")
 
 			// Register tools and handlers
 			registerNpmTool(s, cache, sharedCache)
@@ -89,17 +117,22 @@ func main() {
 			registerDockerTool(s, cache, sharedCache)
 			registerSwiftTool(s, cache, sharedCache)
 
+			logger.Info("All handlers registered successfully")
+
 			// Start the server
-			fmt.Fprintln(os.Stderr, "Starting MegaTool Package Version MCP Server...")
+			logger.Info("Starting MCP server on stdio")
 			if err := server.ServeStdio(s); err != nil {
+				logger.WithError(err).Error("Server error")
 				return fmt.Errorf("server error: %w", err)
 			}
 
+			logger.Info("MCP server stopped")
 			return nil
 		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
+		logger.WithError(err).Error("Application error")
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -107,8 +140,10 @@ func main() {
 
 // registerNpmTool registers the npm version checking tool
 func registerNpmTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering NPM version checking tool")
+
 	// Create NPM handler
-	npmHandler := handlers.NewNpmHandler(nil, sharedCache)
+	npmHandler := handlers.NewNpmHandler(logger, sharedCache)
 
 	// Add NPM tool
 	npmTool := mcp.NewTool("check_npm_versions",
@@ -124,14 +159,17 @@ func registerNpmTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
 
 	// Add NPM handler
 	s.AddTool(npmTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_npm_versions").Info("Received request")
 		return npmHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 }
 
 // registerPythonTools registers the Python version checking tools
 func registerPythonTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering Python version checking tools")
+
 	// Create Python handler
-	pythonHandler := handlers.NewPythonHandler(nil, sharedCache)
+	pythonHandler := handlers.NewPythonHandler(logger, sharedCache)
 
 	// Tool for requirements.txt
 	pythonTool := mcp.NewTool("check_python_versions",
@@ -144,6 +182,7 @@ func registerPythonTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Ma
 
 	// Add Python requirements.txt handler
 	s.AddTool(pythonTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_python_versions").Info("Received request")
 		return pythonHandler.GetLatestVersionFromRequirements(ctx, request.Params.Arguments)
 	})
 
@@ -158,14 +197,17 @@ func registerPythonTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Ma
 
 	// Add Python pyproject.toml handler
 	s.AddTool(pyprojectTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_pyproject_versions").Info("Received request")
 		return pythonHandler.GetLatestVersionFromPyProject(ctx, request.Params.Arguments)
 	})
 }
 
 // registerJavaTools registers the Java version checking tools
 func registerJavaTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering Java version checking tools")
+
 	// Create Java handler
-	javaHandler := handlers.NewJavaHandler(nil, sharedCache)
+	javaHandler := handlers.NewJavaHandler(logger, sharedCache)
 
 	// Tool for Maven
 	mavenTool := mcp.NewTool("check_maven_versions",
@@ -178,6 +220,7 @@ func registerJavaTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Map)
 
 	// Add Maven handler
 	s.AddTool(mavenTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_maven_versions").Info("Received request")
 		return javaHandler.GetLatestVersionFromMaven(ctx, request.Params.Arguments)
 	})
 
@@ -192,14 +235,17 @@ func registerJavaTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Map)
 
 	// Add Gradle handler
 	s.AddTool(gradleTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_gradle_versions").Info("Received request")
 		return javaHandler.GetLatestVersionFromGradle(ctx, request.Params.Arguments)
 	})
 }
 
 // registerGoTool registers the Go version checking tool
 func registerGoTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering Go version checking tool")
+
 	// Create Go handler
-	goHandler := handlers.NewGoHandler(nil, sharedCache)
+	goHandler := handlers.NewGoHandler(logger, sharedCache)
 
 	goTool := mcp.NewTool("check_go_versions",
 		mcp.WithDescription("Check latest stable versions for Go packages in go.mod"),
@@ -211,14 +257,17 @@ func registerGoTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
 
 	// Add Go handler
 	s.AddTool(goTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_go_versions").Info("Received request")
 		return goHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 }
 
 // registerBedrockTools registers the AWS Bedrock tools
 func registerBedrockTools(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering AWS Bedrock tools")
+
 	// Create Bedrock handler
-	bedrockHandler := handlers.NewBedrockHandler(nil, sharedCache)
+	bedrockHandler := handlers.NewBedrockHandler(logger, sharedCache)
 
 	// Tool for searching Bedrock models
 	bedrockTool := mcp.NewTool("check_bedrock_models",
@@ -244,6 +293,10 @@ func registerBedrockTools(s *server.MCPServer, cache *Cache, sharedCache *sync.M
 
 	// Add Bedrock handler
 	s.AddTool(bedrockTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithFields(logrus.Fields{
+			"tool":   "check_bedrock_models",
+			"action": request.Params.Arguments["action"],
+		}).Info("Received request")
 		return bedrockHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 
@@ -254,6 +307,7 @@ func registerBedrockTools(s *server.MCPServer, cache *Cache, sharedCache *sync.M
 
 	// Add Bedrock Claude Sonnet handler
 	s.AddTool(sonnetTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "get_latest_bedrock_model").Info("Received request")
 		// Set the action to get_latest_claude_sonnet to use the specialized method
 		return bedrockHandler.GetLatestVersion(ctx, map[string]interface{}{
 			"action": "get_latest_claude_sonnet",
@@ -263,8 +317,10 @@ func registerBedrockTools(s *server.MCPServer, cache *Cache, sharedCache *sync.M
 
 // registerDockerTool registers the Docker version checking tool
 func registerDockerTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering Docker version checking tool")
+
 	// Create Docker handler
-	dockerHandler := handlers.NewDockerHandler(nil, sharedCache)
+	dockerHandler := handlers.NewDockerHandler(logger, sharedCache)
 
 	dockerTool := mcp.NewTool("check_docker_tags",
 		mcp.WithDescription("Check available tags for Docker container images from Docker Hub, GitHub Container Registry, or custom registries"),
@@ -295,14 +351,21 @@ func registerDockerTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map
 
 	// Add Docker handler
 	s.AddTool(dockerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithFields(logrus.Fields{
+			"tool":     "check_docker_tags",
+			"image":    request.Params.Arguments["image"],
+			"registry": request.Params.Arguments["registry"],
+		}).Info("Received request")
 		return dockerHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 }
 
 // registerSwiftTool registers the Swift version checking tool
 func registerSwiftTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map) {
+	logger.Info("Registering Swift version checking tool")
+
 	// Create Swift handler
-	swiftHandler := handlers.NewSwiftHandler(nil, sharedCache)
+	swiftHandler := handlers.NewSwiftHandler(logger, sharedCache)
 
 	swiftTool := mcp.NewTool("check_swift_versions",
 		mcp.WithDescription("Check latest stable versions for Swift packages in Package.swift"),
@@ -317,6 +380,7 @@ func registerSwiftTool(s *server.MCPServer, cache *Cache, sharedCache *sync.Map)
 
 	// Add Swift handler
 	s.AddTool(swiftTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.WithField("tool", "check_swift_versions").Info("Received request")
 		return swiftHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 }

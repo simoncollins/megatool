@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/sirupsen/logrus"
 )
 
 // HTTPClient is an interface for making HTTP requests
@@ -27,8 +28,27 @@ var (
 
 // MakeRequest makes an HTTP request and returns the response body
 func MakeRequest(client HTTPClient, method, url string, headers map[string]string) ([]byte, error) {
+	return MakeRequestWithLogger(client, nil, method, url, headers)
+}
+
+// MakeRequestWithLogger makes an HTTP request with logging and returns the response body
+func MakeRequestWithLogger(client HTTPClient, logger *logrus.Logger, method, url string, headers map[string]string) ([]byte, error) {
+	if logger != nil {
+		logger.WithFields(logrus.Fields{
+			"method": method,
+			"url":    url,
+		}).Debug("Making HTTP request")
+	}
+
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
+		if logger != nil {
+			logger.WithFields(logrus.Fields{
+				"method": method,
+				"url":    url,
+				"error":  err.Error(),
+			}).Error("Failed to create request")
+		}
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -48,6 +68,13 @@ func MakeRequest(client HTTPClient, method, url string, headers map[string]strin
 	// Send request
 	resp, err := client.Do(req)
 	if err != nil {
+		if logger != nil {
+			logger.WithFields(logrus.Fields{
+				"method": method,
+				"url":    url,
+				"error":  err.Error(),
+			}).Error("Failed to send request")
+		}
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -55,12 +82,35 @@ func MakeRequest(client HTTPClient, method, url string, headers map[string]strin
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if logger != nil {
+			logger.WithFields(logrus.Fields{
+				"method": method,
+				"url":    url,
+				"error":  err.Error(),
+			}).Error("Failed to read response body")
+		}
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	// Check for errors
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if logger != nil {
+			logger.WithFields(logrus.Fields{
+				"method":     method,
+				"url":        url,
+				"statusCode": resp.StatusCode,
+				"body":       string(body),
+			}).Error("Unexpected status code")
+		}
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, body)
+	}
+
+	if logger != nil {
+		logger.WithFields(logrus.Fields{
+			"method":     method,
+			"url":        url,
+			"statusCode": resp.StatusCode,
+		}).Debug("HTTP request completed successfully")
 	}
 
 	return body, nil

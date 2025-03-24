@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -21,19 +22,18 @@ const (
 type NpmHandler struct {
 	client HTTPClient
 	cache  *sync.Map
+	logger *logrus.Logger
 }
 
 // NewNpmHandler creates a new npm handler
-func NewNpmHandler(client HTTPClient, cache *sync.Map) *NpmHandler {
-	if client == nil {
-		client = DefaultHTTPClient
-	}
+func NewNpmHandler(logger *logrus.Logger, cache *sync.Map) *NpmHandler {
 	if cache == nil {
 		cache = &sync.Map{}
 	}
 	return &NpmHandler{
-		client: client,
+		client: DefaultHTTPClient,
 		cache:  cache,
+		logger: logger,
 	}
 }
 
@@ -48,14 +48,21 @@ type NpmPackageInfo struct {
 
 // getPackageInfo gets information about an npm package
 func (h *NpmHandler) getPackageInfo(packageName string) (*NpmPackageInfo, error) {
+	if h.logger != nil {
+		h.logger.WithField("package", packageName).Debug("Getting npm package info")
+	}
+
 	// Check cache first
 	if cachedInfo, ok := h.cache.Load(packageName); ok {
+		if h.logger != nil {
+			h.logger.WithField("package", packageName).Debug("Using cached npm package info")
+		}
 		return cachedInfo.(*NpmPackageInfo), nil
 	}
 
 	// Make request to npm registry
 	url := fmt.Sprintf("%s/%s", NpmRegistryURL, url.PathEscape(packageName))
-	body, err := MakeRequest(h.client, "GET", url, nil)
+	body, err := MakeRequestWithLogger(h.client, h.logger, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch npm package %s: %w", packageName, err)
 	}
@@ -63,20 +70,42 @@ func (h *NpmHandler) getPackageInfo(packageName string) (*NpmPackageInfo, error)
 	// Parse response
 	var info NpmPackageInfo
 	if err := json.Unmarshal(body, &info); err != nil {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"package": packageName,
+				"error":   err.Error(),
+			}).Error("Failed to parse npm package info")
+		}
 		return nil, fmt.Errorf("failed to parse npm package info: %w", err)
 	}
 
 	// Cache the result
 	h.cache.Store(packageName, &info)
 
+	if h.logger != nil {
+		h.logger.WithField("package", packageName).Debug("Successfully retrieved npm package info")
+	}
+
 	return &info, nil
 }
 
 // getPackageVersion gets the latest version of an npm package
 func (h *NpmHandler) getPackageVersion(packageName, currentVersion string, constraint *VersionConstraint) (*PackageVersion, error) {
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"package":        packageName,
+			"currentVersion": currentVersion,
+		}).Debug("Getting latest npm package version")
+	}
 	// Check if package should be excluded
 	if constraint != nil && constraint.ExcludePackage {
 		cleanVersion := CleanVersion(currentVersion)
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"package":        packageName,
+				"currentVersion": cleanVersion,
+			}).Info("Package excluded from updates")
+		}
 		return &PackageVersion{
 			Name:           packageName,
 			CurrentVersion: StringPtr(cleanVersion),
@@ -102,6 +131,12 @@ func (h *NpmHandler) getPackageVersion(packageName, currentVersion string, const
 	// If major version constraint exists, find the latest version within that major
 	if constraint != nil && constraint.MajorVersion != nil {
 		targetMajor := *constraint.MajorVersion
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"package":      packageName,
+				"majorVersion": targetMajor,
+			}).Debug("Limiting to specific major version")
+		}
 		versions := make([]string, 0, len(info.Versions))
 		for version := range info.Versions {
 			major, _, _, err := ParseVersion(version)
@@ -123,6 +158,13 @@ func (h *NpmHandler) getPackageVersion(packageName, currentVersion string, const
 				return cmp > 0
 			})
 			latestVersion = versions[0]
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"package":       packageName,
+					"majorVersion":  targetMajor,
+					"latestVersion": latestVersion,
+				}).Debug("Found latest version for major version")
+			}
 		}
 	}
 
@@ -148,6 +190,9 @@ func (h *NpmHandler) getPackageVersion(packageName, currentVersion string, const
 
 // GetLatestVersion gets the latest versions for npm packages
 func (h *NpmHandler) GetLatestVersion(ctx context.Context, args interface{}) (*mcp.CallToolResult, error) {
+	if h.logger != nil {
+		h.logger.Info("Processing npm version check request")
+	}
 	// Parse arguments
 	var params struct {
 		Dependencies map[string]string      `json:"dependencies"`
@@ -157,15 +202,28 @@ func (h *NpmHandler) GetLatestVersion(ctx context.Context, args interface{}) (*m
 	// Convert args to JSON and back to ensure proper type conversion
 	jsonData, err := json.Marshal(args)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to marshal arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal arguments: %v", err)), nil
 	}
 
 	if err := json.Unmarshal(jsonData, &params); err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to parse arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse arguments: %v", err)), nil
 	}
 
 	if params.Dependencies == nil {
+		if h.logger != nil {
+			h.logger.Error("Dependencies object is required")
+		}
 		return mcp.NewToolResultError("Dependencies object is required"), nil
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("dependencyCount", len(params.Dependencies)).Info("Checking npm package versions")
 	}
 
 	// Parse constraints
@@ -190,6 +248,9 @@ func (h *NpmHandler) GetLatestVersion(ctx context.Context, args interface{}) (*m
 	results := make([]*PackageVersion, 0, len(params.Dependencies))
 	for name, version := range params.Dependencies {
 		if strings.TrimSpace(version) == "" {
+			if h.logger != nil {
+				h.logger.WithField("package", name).Debug("Skipping package with empty version")
+			}
 			continue
 		}
 
@@ -200,11 +261,22 @@ func (h *NpmHandler) GetLatestVersion(ctx context.Context, args interface{}) (*m
 
 		result, err := h.getPackageVersion(name, version, constraint)
 		if err != nil {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"package": name,
+					"version": version,
+					"error":   err.Error(),
+				}).Error("Error checking npm package")
+			}
 			fmt.Printf("Error checking npm package %s: %v\n", name, err)
 			continue
 		}
 
 		results = append(results, result)
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("resultCount", len(results)).Info("Completed npm version check")
 	}
 
 	// Return results

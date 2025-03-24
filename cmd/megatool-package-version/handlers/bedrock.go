@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -26,27 +27,36 @@ type BedrockHandler struct {
 	modelsCache []BedrockModel
 	lastFetch   time.Time
 	cacheMutex  sync.RWMutex
+	logger      *logrus.Logger
 }
 
 // NewBedrockHandler creates a new Bedrock handler
-func NewBedrockHandler(client HTTPClient, cache *sync.Map) *BedrockHandler {
-	if client == nil {
-		client = DefaultHTTPClient
-	}
+func NewBedrockHandler(logger *logrus.Logger, cache *sync.Map) *BedrockHandler {
 	if cache == nil {
 		cache = &sync.Map{}
 	}
 	return &BedrockHandler{
-		client: client,
+		client: DefaultHTTPClient,
 		cache:  cache,
+		logger: logger,
 	}
 }
 
 // fetchModels fetches the latest Bedrock model information from AWS documentation
 func (h *BedrockHandler) fetchModels() ([]BedrockModel, error) {
+	if h.logger != nil {
+		h.logger.Debug("Fetching Bedrock models")
+	}
+
 	// Check if we have a valid cache
 	h.cacheMutex.RLock()
 	if len(h.modelsCache) > 0 && time.Since(h.lastFetch) < BedrockCacheTTL {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"modelCount": len(h.modelsCache),
+				"cacheAge":   time.Since(h.lastFetch).String(),
+			}).Debug("Using cached Bedrock models")
+		}
 		models := h.modelsCache
 		h.cacheMutex.RUnlock()
 		return models, nil
@@ -59,21 +69,48 @@ func (h *BedrockHandler) fetchModels() ([]BedrockModel, error) {
 
 	// Check again in case another goroutine updated the cache while we were waiting
 	if len(h.modelsCache) > 0 && time.Since(h.lastFetch) < BedrockCacheTTL {
+		if h.logger != nil {
+			h.logger.WithFields(logrus.Fields{
+				"modelCount": len(h.modelsCache),
+				"cacheAge":   time.Since(h.lastFetch).String(),
+			}).Debug("Using cached Bedrock models (after lock)")
+		}
 		return h.modelsCache, nil
 	}
 
+	if h.logger != nil {
+		h.logger.WithField("url", BedrockDocsURL).Debug("Making request to AWS Bedrock documentation")
+	}
+
 	// Make request to AWS Bedrock documentation
-	body, err := MakeRequest(h.client, "GET", BedrockDocsURL, nil)
+	body, err := MakeRequestWithLogger(h.client, h.logger, "GET", BedrockDocsURL, nil)
 	if err != nil {
 		// If we have a cache, return it even if it's expired
 		if len(h.modelsCache) > 0 {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"error":      err.Error(),
+					"modelCount": len(h.modelsCache),
+					"cacheAge":   time.Since(h.lastFetch).String(),
+				}).Warn("Failed to fetch Bedrock models, using expired cache")
+			}
 			return h.modelsCache, nil
+		}
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to fetch Bedrock models and no cache available")
 		}
 		return nil, fmt.Errorf("failed to fetch Bedrock models: %w", err)
 	}
 
 	// Parse the HTML to extract the model information
+	if h.logger != nil {
+		h.logger.Debug("Parsing Bedrock models from HTML")
+	}
 	models := h.parseModelsFromHTML(string(body))
+
+	if h.logger != nil {
+		h.logger.WithField("modelCount", len(models)).Info("Successfully fetched and parsed Bedrock models")
+	}
 
 	// Update cache
 	h.modelsCache = models
@@ -90,6 +127,9 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 	tableRegex := regexp.MustCompile(`<table[\s\S]*?>[\s\S]*?</table>`)
 	tableMatch := tableRegex.FindString(html)
 	if tableMatch == "" {
+		if h.logger != nil {
+			h.logger.Error("No table found in HTML")
+		}
 		fmt.Println("No table found in HTML")
 		return models
 	}
@@ -98,8 +138,15 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 	rowRegex := regexp.MustCompile(`<tr[\s\S]*?>[\s\S]*?</tr>`)
 	rows := rowRegex.FindAllString(tableMatch, -1)
 	if len(rows) <= 1 {
+		if h.logger != nil {
+			h.logger.Error("No rows found in table")
+		}
 		fmt.Println("No rows found in table")
 		return models
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("rowCount", len(rows)-1).Debug("Found rows in table")
 	}
 
 	// Skip the header row
@@ -110,6 +157,13 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 		cellRegex := regexp.MustCompile(`<t[dh][\s\S]*?>[\s\S]*?</t[dh]>`)
 		cells := cellRegex.FindAllString(row, -1)
 		if len(cells) < 7 {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"rowIndex": i,
+					"cellCount": len(cells),
+					"rowPreview": row[:100] + "...",
+				}).Warn("Invalid row format")
+			}
 			fmt.Printf("Invalid row format (cells: %d): %s\n", len(cells), row[:100]+"...")
 			continue
 		}
@@ -125,6 +179,13 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 
 		// Only add if we have valid data
 		if modelName != "" && modelID != "" {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"provider": provider,
+					"modelName": modelName,
+					"modelID": modelID,
+				}).Debug("Found Bedrock model")
+			}
 			models = append(models, BedrockModel{
 				Provider:           provider,
 				ModelName:          modelName,
@@ -134,6 +195,14 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 				OutputModalities:   outputModalities,
 				StreamingSupported: streamingSupported,
 			})
+		} else {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"provider": provider,
+					"modelName": modelName,
+					"modelID": modelID,
+				}).Warn("Skipping invalid model data")
+			}
 		}
 	}
 
@@ -178,6 +247,14 @@ func (h *BedrockHandler) extractListFromCell(cell string) []string {
 
 // searchModels searches for Bedrock models based on query parameters
 func (h *BedrockHandler) searchModels(query, provider, region string) (*BedrockModelSearchResult, error) {
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"query": query,
+			"provider": provider,
+			"region": region,
+		}).Debug("Searching Bedrock models")
+	}
+
 	models, err := h.fetchModels()
 	if err != nil {
 		return nil, err
@@ -217,6 +294,15 @@ func (h *BedrockHandler) searchModels(query, provider, region string) (*BedrockM
 		}
 	}
 
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"query": query,
+			"provider": provider,
+			"region": region,
+			"totalMatches": len(filteredModels),
+		}).Debug("Completed Bedrock model search")
+	}
+
 	// Sort results by relevance if there's a query
 	if normalizedQuery != "" {
 		// Sort by exact match first, then by how early the match appears
@@ -232,6 +318,10 @@ func (h *BedrockHandler) searchModels(query, provider, region string) (*BedrockM
 
 // getModelByID gets a specific Bedrock model by ID
 func (h *BedrockHandler) getModelByID(modelID string) (*BedrockModel, error) {
+	if h.logger != nil {
+		h.logger.WithField("modelID", modelID).Debug("Getting Bedrock model by ID")
+	}
+
 	models, err := h.fetchModels()
 	if err != nil {
 		return nil, err
@@ -239,15 +329,29 @@ func (h *BedrockHandler) getModelByID(modelID string) (*BedrockModel, error) {
 
 	for _, model := range models {
 		if model.ModelID == modelID {
+			if h.logger != nil {
+				h.logger.WithFields(logrus.Fields{
+					"modelID": modelID,
+					"modelName": model.ModelName,
+					"provider": model.Provider,
+				}).Debug("Found Bedrock model by ID")
+			}
 			return &model, nil
 		}
 	}
 
+	if h.logger != nil {
+		h.logger.WithField("modelID", modelID).Error("Bedrock model not found")
+	}
 	return nil, fmt.Errorf("model not found: %s", modelID)
 }
 
 // getLatestClaudeSonnetModel gets the latest Claude Sonnet model
 func (h *BedrockHandler) getLatestClaudeSonnetModel() (*BedrockModel, error) {
+	if h.logger != nil {
+		h.logger.Debug("Getting latest Claude Sonnet model")
+	}
+
 	models, err := h.fetchModels()
 	if err != nil {
 		return nil, err
@@ -266,7 +370,14 @@ func (h *BedrockHandler) getLatestClaudeSonnetModel() (*BedrockModel, error) {
 	}
 
 	if len(sonnetModels) == 0 {
+		if h.logger != nil {
+			h.logger.Error("No Claude Sonnet models found")
+		}
 		return nil, fmt.Errorf("no Claude Sonnet models found")
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("sonnetModelCount", len(sonnetModels)).Debug("Found Claude Sonnet models")
 	}
 
 	// Sort by version number to find the latest
@@ -301,11 +412,23 @@ func (h *BedrockHandler) getLatestClaudeSonnetModel() (*BedrockModel, error) {
 		}
 	}
 
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"modelName": latestModel.ModelName,
+			"modelID": latestModel.ModelID,
+			"version": latestVersion,
+		}).Info("Found latest Claude Sonnet model")
+	}
+
 	return &latestModel, nil
 }
 
 // GetLatestVersion gets the latest versions for Bedrock models
 func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{}) (*mcp.CallToolResult, error) {
+	if h.logger != nil {
+		h.logger.Info("Processing Bedrock model check request")
+	}
+
 	// Parse arguments
 	var params struct {
 		Action   string `json:"action,omitempty"`
@@ -318,16 +441,32 @@ func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{})
 	// Convert args to JSON and back to ensure proper type conversion
 	jsonData, err := json.Marshal(args)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to marshal arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal arguments: %v", err)), nil
 	}
 
 	if err := json.Unmarshal(jsonData, &params); err != nil {
+		if h.logger != nil {
+			h.logger.WithError(err).Error("Failed to parse arguments")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse arguments: %v", err)), nil
 	}
 
 	// Set default action
 	if params.Action == "" {
 		params.Action = "list"
+	}
+
+	if h.logger != nil {
+		h.logger.WithFields(logrus.Fields{
+			"action": params.Action,
+			"query": params.Query,
+			"provider": params.Provider,
+			"region": params.Region,
+			"modelID": params.ModelID,
+		}).Debug("Processing Bedrock request")
 	}
 
 	var result interface{}
@@ -338,6 +477,9 @@ func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{})
 		result, fetchErr = h.searchModels(params.Query, params.Provider, params.Region)
 	case "get":
 		if params.ModelID == "" {
+			if h.logger != nil {
+				h.logger.Error("Model ID is required for 'get' action")
+			}
 			return mcp.NewToolResultError("Model ID is required for 'get' action"), nil
 		}
 		model, err := h.getModelByID(params.ModelID)
@@ -352,6 +494,9 @@ func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{})
 	case "get_latest_claude_sonnet":
 		model, err := h.getLatestClaudeSonnetModel()
 		if err != nil {
+			if h.logger != nil {
+				h.logger.WithError(err).Error("Failed to get latest Claude Sonnet model")
+			}
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to get latest Claude Sonnet model: %v", err)), nil
 		}
 		result = model
@@ -369,7 +514,14 @@ func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{})
 	}
 
 	if fetchErr != nil {
+		if h.logger != nil {
+			h.logger.WithError(fetchErr).Error("Failed to fetch Bedrock models")
+		}
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to fetch Bedrock models: %v", fetchErr)), nil
+	}
+
+	if h.logger != nil {
+		h.logger.WithField("action", params.Action).Info("Completed Bedrock model check")
 	}
 
 	// Return results

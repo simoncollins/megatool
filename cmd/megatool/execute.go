@@ -10,7 +10,7 @@ import (
 )
 
 // executeMcpServer executes an MCP server binary with logging
-func executeMcpServer(serverName string, args []string) error {
+func executeMcpServer(serverName string, args []string, client string) error {
 	// Construct the binary name
 	binaryName := "megatool-" + serverName
 
@@ -70,8 +70,13 @@ func executeMcpServer(serverName string, args []string) error {
 			serverName, cmd.Process.Pid, logger.FilePath)
 	}
 
-	// Record the PID
-	if err := utils.AddServerRecord(serverName, cmd.Process.Pid); err != nil {
+	// Record the PID with client info if specified
+	var opts utils.ServerRecordOptions
+	if client != "" {
+		opts.Client = client
+	}
+	
+	if err := utils.AddServerRecord(serverName, cmd.Process.Pid, opts); err != nil {
 		utils.PrintError("Failed to record server process: %v", err)
 		// Continue anyway, this is not fatal
 	}

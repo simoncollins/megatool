@@ -13,6 +13,12 @@ type ServerRecord struct {
 	Name      string    `json:"name"`
 	PID       int       `json:"pid"`
 	StartTime time.Time `json:"start_time"`
+	Client    string    `json:"client,omitempty"`
+}
+
+// ServerRecordOptions contains optional fields for server records
+type ServerRecordOptions struct {
+	Client string
 }
 
 // GetServerRecordsPath returns the path to the server records file
@@ -76,7 +82,7 @@ func WriteServerRecords(records []ServerRecord) error {
 }
 
 // AddServerRecord adds a server record to the list
-func AddServerRecord(name string, pid int) error {
+func AddServerRecord(name string, pid int, opts ...ServerRecordOptions) error {
 	records, err := ReadServerRecords()
 	if err != nil {
 		return err
@@ -85,12 +91,20 @@ func AddServerRecord(name string, pid int) error {
 	// Clean up stale records first
 	records = CleanupStaleRecords(records)
 
-	// Add new record
-	records = append(records, ServerRecord{
+	// Create new record
+	record := ServerRecord{
 		Name:      name,
 		PID:       pid,
 		StartTime: time.Now(),
-	})
+	}
+
+	// Apply options if provided
+	if len(opts) > 0 {
+		record.Client = opts[0].Client
+	}
+
+	// Add new record
+	records = append(records, record)
 
 	return WriteServerRecords(records)
 }

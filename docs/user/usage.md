@@ -10,11 +10,17 @@ MegaTool uses a simple command structure:
 megatool [global options] command [command options] [arguments...]
 ```
 
-The primary command for accessing MCP servers is `run`:
+The primary commands for working with MCP servers are:
 
-```
-megatool run <server-name> [options]
-```
+- `run`: Start an MCP server
+  ```
+  megatool run <server-name> [options]
+  ```
+
+- `install`: Install an MCP server into a client's configuration
+  ```
+  megatool install --client <client-name> <server-name>
+  ```
 
 ## Global Options
 
@@ -44,7 +50,27 @@ Where `<server-name>` is one of the available MCP servers:
 | Option | Description |
 |--------|-------------|
 | `--configure` | Configure the server before running |
+| `--client` | Target MCP client (e.g., cline) |
 | `--help`, `-h` | Show help information for the server |
+
+## The `install` Command
+
+The `install` command is used to install an MCP server into a client's configuration:
+
+```bash
+megatool install --client <client-name> <server-name>
+```
+
+Where:
+- `<client-name>` is the name of the MCP client (currently supports `cline`)
+- `<server-name>` is one of the available MCP servers
+
+### Options for the `install` Command
+
+| Option | Description |
+|--------|-------------|
+| `--client`, `-c` | Target MCP client (e.g., cline) - required |
+| `--help`, `-h` | Show help information |
 
 ## Configuration
 
@@ -98,7 +124,9 @@ The Package Version server checks for the latest versions of packages from vario
 
 MegaTool is designed to be used with MCP clients, such as Claude or other AI assistants that support the Model Context Protocol. When running an MCP server, it communicates with the client over stdio.
 
-To use MegaTool with an MCP client:
+### Direct Usage
+
+To use MegaTool directly with an MCP client:
 
 1. Start the MCP server:
    ```bash
@@ -108,6 +136,58 @@ To use MegaTool with an MCP client:
 2. The server will wait for MCP requests from the client.
 
 3. The client can then use the server's tools and resources through the MCP interface.
+
+### Installing into a Client's Configuration
+
+For a more integrated experience, you can install an MCP server into a client's configuration:
+
+1. Install the server into the client's configuration:
+   ```bash
+   megatool install --client cline <server-name>
+   ```
+
+2. The server will be added to the client's configuration file.
+
+3. The client will automatically start the server when needed.
+
+#### Supported Clients
+
+Currently, MegaTool supports the following MCP clients:
+
+- `cline`: The VS Code Cline extension for Claude
+
+## The `ps` Command
+
+The `ps` command is used to list running MCP servers:
+
+```bash
+megatool ps [options]
+```
+
+### Options for the `ps` Command
+
+| Option | Description |
+|--------|-------------|
+| `--format`, `-f` | Output format (table, json, csv) |
+| `--fields` | Comma-separated list of fields to display (name, pid, uptime, client) |
+| `--no-header` | Don't print header row |
+| `--client` | Filter servers by client (e.g., cline) |
+
+## The `stop` Command
+
+The `stop` command is used to stop running MCP servers:
+
+```bash
+megatool stop <server-name> [options]
+```
+
+### Options for the `stop` Command
+
+| Option | Description |
+|--------|-------------|
+| `--all` | Stop all instances of the specified server |
+| `--pid` | Stop a specific instance by PID |
+| `--client` | Filter servers by client (e.g., cline) |
 
 ## Troubleshooting
 

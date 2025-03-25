@@ -12,6 +12,97 @@ func setupCommands() []*cli.Command {
 	return []*cli.Command{
 		logsCommand(),
 		{
+			Name:  "install",
+			Usage: "Install an MCP server into a client's configuration",
+			Description: `Install an MCP server into a client's configuration.
+Currently supports the following clients:
+  - cline (Visual Studio Code Cline extension)`,
+			ArgsUsage: "<server>",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     "client",
+					Aliases:  []string{"c"},
+					Usage:    "Target MCP client (e.g., cline)",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				// Check if we have enough arguments
+				if c.NArg() < 1 {
+					// Show available servers
+					fmt.Println("Available servers:")
+					if err := listAvailableServers("  "); err != nil {
+						fmt.Println("  No servers found")
+					}
+					return fmt.Errorf("no server specified")
+				}
+
+				// Get the client type
+				clientStr := c.String("client")
+				var clientType utils.ClientType
+				switch clientStr {
+				case "cline":
+					clientType = utils.ClientCline
+				default:
+					utils.PrintError("Unsupported client type: %s", clientStr)
+					utils.PrintInfo("Supported client types: cline")
+					return fmt.Errorf("unsupported client type")
+				}
+
+				// Get the server name from the first argument
+				serverName := c.Args().First()
+
+				// Check if the server exists in our list of available servers
+				availableServers, err := utils.GetAvailableServers()
+				if err != nil {
+					utils.PrintError("Failed to get available servers: %v", err)
+					return err
+				}
+
+				serverExists := false
+				for _, server := range availableServers {
+					if server == serverName {
+						serverExists = true
+						break
+					}
+				}
+
+				if !serverExists {
+					utils.PrintError("Server '%s' not found", serverName)
+					utils.PrintInfo("Run 'megatool ls' to see available servers")
+					return fmt.Errorf("server not found")
+				}
+
+				// Get the config file path
+				configPath, err := utils.GetClientConfigPath(clientType)
+				if err != nil {
+					utils.PrintError("Failed to get config path: %v", err)
+					return err
+				}
+
+				// Install the server
+				if err := utils.InstallServer(clientType, serverName); err != nil {
+					utils.PrintError("Failed to install server: %v", err)
+					return err
+				}
+
+				utils.PrintInfo("Server '%s' installed successfully into %s config at %s", serverName, clientStr, configPath)
+				return nil
+			},
+			BashComplete: func(c *cli.Context) {
+				// If we're completing the first argument, list available servers
+				if c.NArg() == 0 {
+					servers, err := utils.GetAvailableServers()
+					if err != nil {
+						return
+					}
+					for _, server := range servers {
+						fmt.Println(server)
+					}
+				}
+			},
+		},
+		{
 			Name:  "run",
 			Usage: "Run an MCP server",
 			Description: `Run an MCP server with the specified name.
@@ -21,6 +112,11 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 				&cli.BoolFlag{
 					Name:  "configure",
 					Usage: "Configure the server",
+				},
+				&cli.StringFlag{
+					Name:  "client",
+					Usage: "Target MCP client (e.g., cline)",
+					Value: "",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -58,9 +154,12 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					return fmt.Errorf("server not found")
 				}
 
+				// Extract client if specified
+				client := c.String("client")
+				
 				// Execute the specified MCP server
 				// Pass all arguments after the server name
-				return executeMcpServer(serverName, c.Args().Slice()[1:])
+				return executeMcpServer(serverName, c.Args().Slice()[1:], client)
 			},
 			BashComplete: func(c *cli.Context) {
 				// If we're completing the first argument, list available servers
@@ -100,12 +199,17 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 				},
 				&cli.StringFlag{
 					Name:    "fields",
-					Value:   "name,pid,uptime",
-					Usage:   "Comma-separated list of fields to display (name, pid, uptime)",
+					Value:   "name,pid,uptime,client",
+					Usage:   "Comma-separated list of fields to display (name, pid, uptime, client)",
 				},
 				&cli.BoolFlag{
 					Name:  "no-header",
 					Usage: "Don't print header row",
+				},
+				&cli.StringFlag{
+					Name:  "client",
+					Usage: "Filter servers by client (e.g., cline)",
+					Value: "",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -124,6 +228,18 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 						utils.PrintError("Failed to update server records: %v", err)
 					}
 					records = activeRecords
+				}
+				
+				// Filter by client if specified
+				clientFilter := c.String("client")
+				if clientFilter != "" {
+					var filteredRecords []utils.ServerRecord
+					for _, record := range records {
+						if record.Client == clientFilter {
+							filteredRecords = append(filteredRecords, record)
+						}
+					}
+					records = filteredRecords
 				}
 				
 				// Format and display records
@@ -150,6 +266,11 @@ using the --pid flag, or use --all to stop all instances.`,
 					Name:  "pid",
 					Usage: "Stop a specific instance by PID",
 					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  "client",
+					Usage: "Filter servers by client (e.g., cline)",
+					Value: "",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -219,6 +340,18 @@ using the --pid flag, or use --all to stop all instances.`,
 				
 				// Clean up stale records
 				records = utils.CleanupStaleRecords(records)
+				
+				// Filter by client if specified
+				clientFilter := c.String("client")
+				if clientFilter != "" {
+					var filteredRecords []utils.ServerRecord
+					for _, record := range records {
+						if record.Client == clientFilter {
+							filteredRecords = append(filteredRecords, record)
+						}
+					}
+					records = filteredRecords
+				}
 				
 				// Find matching server records
 				var matchingRecords []utils.ServerRecord
@@ -323,6 +456,7 @@ AUTHOR:
    {{end}}{{if .Commands}}
 COMMANDS:
    logs        View MCP server logs
+   install     Install an MCP server into a client's configuration
    run         Run an MCP server
    ls          List available MCP servers
    ps          List running MCP servers

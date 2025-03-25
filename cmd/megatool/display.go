@@ -74,6 +74,8 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 				headers = append(headers, "PID")
 			case "uptime":
 				headers = append(headers, "UPTIME")
+			case "client":
+				headers = append(headers, "CLIENT")
 			default:
 				headers = append(headers, strings.ToUpper(field))
 			}
@@ -106,6 +108,12 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 				values = append(values, fmt.Sprintf("%d", record.PID))
 			case "uptime":
 				values = append(values, utils.FormatUptime(record.StartTime))
+			case "client":
+				if record.Client != "" {
+					values = append(values, record.Client)
+				} else {
+					values = append(values, "N/A")
+				}
 			default:
 				values = append(values, "N/A")
 			}
@@ -171,6 +179,12 @@ func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 				item["pid"] = record.PID
 			case "uptime":
 				item["uptime"] = utils.FormatUptime(record.StartTime)
+			case "client":
+				if record.Client != "" {
+					item["client"] = record.Client
+				} else {
+					item["client"] = nil
+				}
 			}
 		}
 		
@@ -203,6 +217,8 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 				headers = append(headers, "PID")
 			case "uptime":
 				headers = append(headers, "UPTIME")
+			case "client":
+				headers = append(headers, "CLIENT")
 			default:
 				headers = append(headers, strings.ToUpper(field))
 			}
@@ -237,6 +253,12 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 				values = append(values, fmt.Sprintf("%d", record.PID))
 			case "uptime":
 				values = append(values, utils.FormatUptime(record.StartTime))
+			case "client":
+				if record.Client != "" {
+					values = append(values, record.Client)
+				} else {
+					values = append(values, "N/A")
+				}
 			default:
 				values = append(values, "N/A")
 			}

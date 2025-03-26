@@ -3,6 +3,8 @@
 MegaTool is a command-line tool that implements multiple Model Context Protocol (MCP) servers, providing various utilities through a unified interface.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/yourusername/megatool/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/megatool/actions/workflows/ci.yml)
+[![Release](https://github.com/yourusername/megatool/actions/workflows/release.yml/badge.svg)](https://github.com/yourusername/megatool/actions/workflows/release.yml)
 
 ## Overview
 
@@ -15,6 +17,11 @@ MegaTool provides access to multiple MCP servers through a simple command-line i
 ## Quick Installation
 
 ```bash
+# From GitHub Releases (recommended)
+# Download from https://github.com/yourusername/megatool/releases
+# Example for Linux:
+tar -xzf megatool-v1.0.0-linux-amd64.tar.gz -C /usr/local/bin
+
 # Using Go
 go install github.com/yourusername/megatool@latest
 

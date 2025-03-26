@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Run linting
+        run: just lint
+
+      - name: Run tests
+        run: just test
+
+      - name: Build
+        run: just build
+
+      # Optional: Upload build artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: megatool-binaries
+          path: bin/
+          retention-days: 7

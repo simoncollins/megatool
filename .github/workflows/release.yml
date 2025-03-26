@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tags that start with 'v' (e.g., v1.0.0)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Run tests
+        run: just test
+
+      # Extract version from tag
+      - name: Set version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      # Cross-compile for platforms (removed darwin-amd64)
+      - name: Build binaries for all platforms
+        run: |
+          # Create directories for each platform
+          mkdir -p dist/linux-amd64 dist/linux-arm64 dist/darwin-arm64 dist/windows-amd64
+
+          # Build for Linux (amd64)
+          GOOS=linux GOARCH=amd64 mise exec -- go build -o dist/linux-amd64/megatool ./cmd/megatool
+          GOOS=linux GOARCH=amd64 mise exec -- go build -o dist/linux-amd64/megatool-calculator ./cmd/megatool-calculator
+          GOOS=linux GOARCH=amd64 mise exec -- go build -o dist/linux-amd64/megatool-github ./cmd/megatool-github
+          GOOS=linux GOARCH=amd64 mise exec -- go build -o dist/linux-amd64/megatool-package-version ./cmd/megatool-package-version
+
+          # Build for Linux (arm64)
+          GOOS=linux GOARCH=arm64 mise exec -- go build -o dist/linux-arm64/megatool ./cmd/megatool
+          GOOS=linux GOARCH=arm64 mise exec -- go build -o dist/linux-arm64/megatool-calculator ./cmd/megatool-calculator
+          GOOS=linux GOARCH=arm64 mise exec -- go build -o dist/linux-arm64/megatool-github ./cmd/megatool-github
+          GOOS=linux GOARCH=arm64 mise exec -- go build -o dist/linux-arm64/megatool-package-version ./cmd/megatool-package-version
+
+          # Build for macOS (arm64 only - for modern Macs)
+          GOOS=darwin GOARCH=arm64 mise exec -- go build -o dist/darwin-arm64/megatool ./cmd/megatool
+          GOOS=darwin GOARCH=arm64 mise exec -- go build -o dist/darwin-arm64/megatool-calculator ./cmd/megatool-calculator
+          GOOS=darwin GOARCH=arm64 mise exec -- go build -o dist/darwin-arm64/megatool-github ./cmd/megatool-github
+          GOOS=darwin GOARCH=arm64 mise exec -- go build -o dist/darwin-arm64/megatool-package-version ./cmd/megatool-package-version
+
+          # Build for Windows (amd64)
+          GOOS=windows GOARCH=amd64 mise exec -- go build -o dist/windows-amd64/megatool.exe ./cmd/megatool
+          GOOS=windows GOARCH=amd64 mise exec -- go build -o dist/windows-amd64/megatool-calculator.exe ./cmd/megatool-calculator
+          GOOS=windows GOARCH=amd64 mise exec -- go build -o dist/windows-amd64/megatool-github.exe ./cmd/megatool-github
+          GOOS=windows GOARCH=amd64 mise exec -- go build -o dist/windows-amd64/megatool-package-version.exe ./cmd/megatool-package-version
+
+      # Create archives for each platform
+      - name: Create release archives
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          
+          # Linux amd64
+          tar -C dist/linux-amd64 -czf megatool-v${VERSION}-linux-amd64.tar.gz .
+          
+          # Linux arm64
+          tar -C dist/linux-arm64 -czf megatool-v${VERSION}-linux-arm64.tar.gz .
+          
+          # macOS arm64 only (for modern Macs)
+          tar -C dist/darwin-arm64 -czf megatool-v${VERSION}-darwin-arm64.tar.gz .
+          
+          # Windows amd64
+          cd dist/windows-amd64
+          zip -r ../../megatool-v${VERSION}-windows-amd64.zip .
+          cd ../..
+
+      # Generate SHA256 checksums for release artifacts
+      - name: Generate checksums
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          # Create a checksum file for each artifact
+          sha256sum megatool-v${VERSION}-linux-amd64.tar.gz > megatool-v${VERSION}-linux-amd64.tar.gz.sha256
+          sha256sum megatool-v${VERSION}-linux-arm64.tar.gz > megatool-v${VERSION}-linux-arm64.tar.gz.sha256
+          sha256sum megatool-v${VERSION}-darwin-arm64.tar.gz > megatool-v${VERSION}-darwin-arm64.tar.gz.sha256
+          sha256sum megatool-v${VERSION}-windows-amd64.zip > megatool-v${VERSION}-windows-amd64.zip.sha256
+          
+          # Also create a single file with all checksums
+          echo "# Megatool v${VERSION} SHA256 Checksums" > checksums.txt
+          sha256sum megatool-v${VERSION}-linux-amd64.tar.gz >> checksums.txt
+          sha256sum megatool-v${VERSION}-linux-arm64.tar.gz >> checksums.txt
+          sha256sum megatool-v${VERSION}-darwin-arm64.tar.gz >> checksums.txt
+          sha256sum megatool-v${VERSION}-windows-amd64.zip >> checksums.txt
+
+      # Create GitHub release
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            megatool-v${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+            megatool-v${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz.sha256
+            megatool-v${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+            megatool-v${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz.sha256
+            megatool-v${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+            megatool-v${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz.sha256
+            megatool-v${{ steps.version.outputs.VERSION }}-windows-amd64.zip
+            megatool-v${{ steps.version.outputs.VERSION }}-windows-amd64.zip.sha256
+            checksums.txt
+          draft: false
+          generate_release_notes: true

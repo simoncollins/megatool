@@ -10,7 +10,29 @@ This guide provides detailed instructions for installing MegaTool on various pla
 
 ## Installation Methods
 
-### Method 1: Using Go Install (Recommended)
+### Method 1: Using GitHub Releases (Recommended)
+
+The easiest way to install MegaTool is by downloading a pre-built binary from the GitHub releases page:
+
+1. Visit the [GitHub Releases page](https://github.com/yourusername/megatool/releases)
+2. Download the appropriate archive for your platform:
+   - `megatool-v{VERSION}-linux-amd64.tar.gz` - For Linux (x86_64)
+   - `megatool-v{VERSION}-linux-arm64.tar.gz` - For Linux (ARM64)
+   - `megatool-v{VERSION}-darwin-arm64.tar.gz` - For macOS (Apple Silicon)
+   - `megatool-v{VERSION}-windows-amd64.zip` - For Windows (x86_64)
+3. Extract the archive to a directory in your PATH:
+
+```bash
+# Linux/macOS (example for v1.0.0 on Linux amd64)
+tar -xzf megatool-v1.0.0-linux-amd64.tar.gz -C /usr/local/bin
+
+# Windows
+# Extract the ZIP file and add the directory to your PATH
+```
+
+Each release includes SHA256 checksums for verifying the integrity of the downloaded files.
+
+### Method 2: Using Go Install
 
 The simplest way to install MegaTool is using Go's install command:
 
@@ -20,7 +42,7 @@ go install github.com/yourusername/megatool@latest
 
 This will download, compile, and install the latest version of MegaTool to your `$GOPATH/bin` directory. Ensure this directory is in your system PATH.
 
-### Method 2: Building from Source
+### Method 3: Building from Source
 
 #### 1. Clone the Repository
 

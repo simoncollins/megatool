@@ -8,6 +8,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for creating releases
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -99,7 +101,7 @@ jobs:
 
       # Create GitHub release
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2.2.1
         with:
           files: |
             megatool-v${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz

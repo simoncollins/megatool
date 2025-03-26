@@ -45,7 +45,7 @@ import (
 	"github.com/modelcontextprotocol/sdk/server"
 	"github.com/modelcontextprotocol/sdk/server/stdio"
 	"github.com/modelcontextprotocol/sdk/types"
-	"github.com/yourusername/megatool/internal/config"
+	"github.com/simoncollins/megatool/internal/config"
 )
 
 func main() {
@@ -328,7 +328,7 @@ import (
 	"github.com/modelcontextprotocol/sdk/server"
 	"github.com/modelcontextprotocol/sdk/server/stdio"
 	"github.com/modelcontextprotocol/sdk/types"
-	"github.com/yourusername/megatool/internal/config"
+	"github.com/simoncollins/megatool/internal/config"
 )
 
 const (

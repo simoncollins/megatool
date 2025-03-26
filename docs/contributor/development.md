@@ -15,7 +15,7 @@ This guide provides information for contributors who want to develop and extend 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/megatool.git
+   git clone https://github.com/simoncollins/megatool.git
    cd megatool
    ```
 

@@ -34,8 +34,22 @@ These options apply to all MegaTool commands:
 | Option | Description |
 |--------|-------------|
 | `--help`, `-h` | Show help information |
-| `--version`, `-v` | Show version information |
+| `--version`, `-v` | Show version information of MegaTool |
 | `--debug` | Enable debug logging |
+
+### Version Information
+
+You can check the current version of MegaTool using the `--version` or `-v` flag:
+
+```bash
+megatool --version
+# Output: megatool version v1.0.0-alpha.4
+```
+
+This is useful for:
+- Reporting issues (always include your version number)
+- Ensuring compatibility with MCP servers
+- Checking if you need to update to a newer release
 
 ## The `run` Command
 

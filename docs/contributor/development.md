@@ -153,13 +153,85 @@ See [Adding a New Server](adding-server.md) for a detailed guide on adding a new
 - Document public APIs with clear descriptions and examples
 - Keep the README and other documentation up to date
 
-## Release Process
+## Versioning and Releases
 
-1. Update version numbers in relevant files
-2. Update the CHANGELOG.md file
-3. Create a new Git tag for the release
-4. Build release binaries
-5. Create a GitHub release with the binaries
+MegaTool follows [Semantic Versioning](https://semver.org/) (SemVer) for its release versioning. The version format is `vMAJOR.MINOR.PATCH[-PRERELEASE]`, where:
+
+- `MAJOR` version increases for incompatible API changes
+- `MINOR` version increases for backward-compatible functionality additions
+- `PATCH` version increases for backward-compatible bug fixes
+- `PRERELEASE` suffix (like `-alpha.4`) indicates pre-release versions
+
+### Version Management
+
+The current version is stored as a constant in `cmd/megatool/version.go` and is displayed when using the `--version` flag.
+
+MegaTool provides Just commands to manage versioning:
+
+#### Checking the Current Version
+
+To see the current version in the codebase:
+
+```bash
+grep 'const Version =' cmd/megatool/version.go
+```
+
+To list all version tags:
+
+```bash
+just version-list
+```
+
+#### Creating a New Version
+
+To update the version and create a matching Git tag:
+
+```bash
+just version 1.0.0
+```
+
+This command will:
+1. Update the version constant in `cmd/megatool/version.go`
+2. Commit the change with a conventional commit message (`chore: bump version to 1.0.0`)
+3. Create an annotated Git tag (`v1.0.0`)
+
+#### Publishing a Release
+
+After creating a new version, you can publish the release with:
+
+```bash
+just release
+```
+
+This command will:
+1. Push the code changes to the remote repository
+2. Push the version tags to trigger the release workflow
+3. Display a confirmation message with the released version
+
+### Release Workflow
+
+The complete release process is:
+
+1. Ensure all changes for the release are committed
+2. Update the version: `just version X.Y.Z`
+3. Publish the release: `just release`
+4. The CI/CD pipeline will automatically build and publish the release artifacts
+
+### Pre-release Versions
+
+For pre-release versions, use the appropriate suffix:
+
+```bash
+just version 1.1.0-alpha.1
+```
+
+### Version History
+
+To view the history of all releases:
+
+```bash
+just version-list
+```
 
 ## Continuous Integration
 

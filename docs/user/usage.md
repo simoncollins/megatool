@@ -22,6 +22,11 @@ The primary commands for working with MCP servers are:
   megatool install --client <client-name> <server-name>
   ```
 
+- `cleanup`: Clean up logs from MCP servers that are no longer running
+  ```
+  megatool cleanup [options]
+  ```
+
 ## Global Options
 
 These options apply to all MegaTool commands:
@@ -188,6 +193,41 @@ megatool stop <server-name> [options]
 | `--all` | Stop all instances of the specified server |
 | `--pid` | Stop a specific instance by PID |
 | `--client` | Filter servers by client (e.g., cline) |
+
+## The `cleanup` Command
+
+The `cleanup` command is used to clean up logs from MCP servers that are no longer running:
+
+```bash
+megatool cleanup [options]
+```
+
+This command will:
+1. Remove log files for processes that are no longer running
+2. Remove entire server log directories if all logs are older than the specified threshold
+3. Clean up stale server records from the running-servers.json file
+
+### Options for the `cleanup` Command
+
+| Option | Description |
+|--------|-------------|
+| `--days`, `-d` | Remove logs older than this many days (default: 30) |
+| `--dry-run` | Show what would be deleted without actually deleting |
+| `--force`, `-f` | Skip confirmation prompts |
+| `--verbose`, `-v` | Show detailed information about the cleanup process |
+
+### Examples
+
+```bash
+# Show what would be cleaned up without actually deleting anything
+megatool cleanup --dry-run
+
+# Clean up logs older than 7 days with detailed output
+megatool cleanup --days 7 --verbose
+
+# Force cleanup without confirmation prompts
+megatool cleanup --force
+```
 
 ## Troubleshooting
 

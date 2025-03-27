@@ -11,6 +11,7 @@ import (
 func setupCommands() []*cli.Command {
 	return []*cli.Command{
 		logsCommand(),
+		cleanupCommand(),
 		{
 			Name:  "install",
 			Usage: "Install an MCP server into a client's configuration",
@@ -456,6 +457,7 @@ AUTHOR:
    {{end}}{{if .Commands}}
 COMMANDS:
    logs        View MCP server logs
+   cleanup     Clean up logs from MCP servers that are no longer running
    install     Install an MCP server into a client's configuration
    run         Run an MCP server
    ls          List available MCP servers

@@ -11,6 +11,7 @@ func main() {
 	app := &cli.App{
 		Name:     "megatool",
 		Usage:    "A tool for managing MCP servers",
+		Version:  Version,
 		Commands: setupCommands(),
 	}
 

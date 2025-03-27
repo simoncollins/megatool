@@ -56,3 +56,24 @@ configure-github:
 clean:
     rm -rf bin
     rm -f coverage.out
+
+# Update version and create a matching git tag (prepare for release)
+version VERSION:
+    @echo "Updating to version {{VERSION}}"
+    @sed -i '' 's/const Version = ".*"/const Version = "{{VERSION}}"/' cmd/megatool/version.go
+    @git add cmd/megatool/version.go
+    @git commit -m "chore: bump version to {{VERSION}}"
+    @git tag -a "v{{VERSION}}" -m "Release v{{VERSION}}"
+    @echo "Version updated and tagged. To publish this release, run: just release"
+
+# Push code and tags to trigger a release
+release:
+    @echo "Pushing code and tags to trigger release workflow..."
+    @git push
+    @git push --tags
+    @echo "Release v$(grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2) deployment triggered!"
+
+# List all version tags
+version-list:
+    @echo "Listing all version tags:"
+    @git tag -l "v*" | sort -V

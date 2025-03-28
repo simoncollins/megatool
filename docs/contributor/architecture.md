@@ -126,6 +126,73 @@ MegaTool follows a consistent error handling approach:
 2. Internal errors are logged with appropriate context
 3. MCP protocol errors follow the MCP specification
 
+## MCP Server Implementation Pattern
+
+To standardize MCP server implementations and reduce code duplication, MegaTool provides a common interface and utility functions for implementing MCP servers.
+
+### MCPServerHandler Interface
+
+The `MCPServerHandler` interface defines the contract that all MCP servers must implement:
+
+```go
+// MCPServerHandler defines the interface for MCP server implementations
+type MCPServerHandler interface {
+    // Initialize sets up the server and registers all tools/resources
+    Initialize(s *server.MCPServer) error
+    
+    // Name returns the display name of the server
+    Name() string
+    
+    // Capabilities returns server capability options
+    Capabilities() []server.ServerOption
+}
+```
+
+This interface abstracts the common functionality of MCP servers, allowing for:
+
+1. Standardized server initialization
+2. Common error handling and logging
+3. Consistent versioning across all servers
+4. Simplified implementation of new servers
+
+### Common Utilities
+
+The `internal/mcpserver` package provides utilities for:
+
+1. **Logger Setup**: Create and configure a standard logger
+2. **Server Creation**: Create and run an MCP server with a standard interface
+3. **CLI App Generation**: Generate a CLI app with standard flags and error handling
+4. **Version Management**: Access the global MegaTool version
+5. **Parameter Extraction**: Helper functions for extracting and validating parameters
+
+### Architecture Flow
+
+The updated architecture follows this pattern:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dispatcher as MegaTool Dispatcher
+    participant Common as Common MCP Utilities
+    participant Handler as MCPServerHandler Implementation
+    participant Server as MCP Server
+
+    User->>Dispatcher: megatool run <server>
+    Dispatcher->>Common: Create server with <server> handler
+    Common->>Handler: Get name
+    Handler-->>Common: Return server name
+    Common->>Handler: Get capabilities
+    Handler-->>Common: Return server capabilities
+    Common->>Server: Create MCP server
+    Common->>Handler: Initialize server
+    Handler->>Server: Register tools and resources
+    Handler-->>Common: Initialization complete
+    Common->>Server: Start server on stdio
+    Server-->>User: Process MCP requests
+```
+
+This architecture ensures consistency across all MCP server implementations while allowing for server-specific functionality to be cleanly implemented.
+
 ## Future Architecture Directions
 
 Potential future enhancements to the architecture include:

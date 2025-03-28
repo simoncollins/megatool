@@ -1,4 +1,9 @@
 package main
 
+import (
+	"github.com/megatool/internal/version"
+)
+
 // Version is the current version of megatool
-const Version = "v1.0.0-alpha.4" // Initial version - will be updated by the versioning command
+// This is imported from the internal/version package to ensure consistency
+var Version = version.Version

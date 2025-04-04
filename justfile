@@ -1,20 +1,12 @@
 # MegaTool justfile
 
-# Check if mise is installed
-_has_mise := `command -v mise >/dev/null 2>&1 && echo "true" || echo "false"`
-
-# Helper function to run a command with mise if available
-_run cmd="":
-    #!/usr/bin/env sh
-    if [ "{{_has_mise}}" = "true" ]; then
-        mise exec -- {{cmd}}
-    else
-        {{cmd}}
-    fi
+# Run command with mise if available, otherwise run directly
+_run cmd="echo":
+    @sh -c "if command -v mise >/dev/null 2>&1; then mise exec -- {{cmd}}; else {{cmd}}; fi"
 
 # Default recipe to run when just is called without arguments
 default:
-    @just --list
+    just --list
 
 # Initialize the project (install dependencies)
 init:
@@ -90,7 +82,7 @@ release:
     @echo "Pushing code and tags to trigger release workflow..."
     @just _run "git push"
     @just _run "git push --tags"
-    @VERSION=$$(if [ "{{_has_mise}}" = "true" ]; then mise exec -- grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; else grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; fi) && echo "Release v$$VERSION deployment triggered!"
+    @VERSION=$$(if command -v mise >/dev/null 2>&1; then mise exec -- grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; else grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; fi) && echo "Release v$$VERSION deployment triggered!"
 
 # List all version tags
 version-list:

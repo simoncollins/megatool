@@ -118,9 +118,9 @@ func NewLogger(serverName string, pid int) (*Logger, error) {
 // WithField adds a field to the logger
 func (l *Logger) WithField(key string, value interface{}) *logrus.Entry {
 	return l.Logger.WithFields(logrus.Fields{
-		key:        value,
-		"server":   l.ServerName,
-		"pid":      l.PID,
+		key:      value,
+		"server": l.ServerName,
+		"pid":    l.PID,
 	})
 }
 
@@ -129,7 +129,7 @@ func (l *Logger) WithFields(fields logrus.Fields) *logrus.Entry {
 	// Add server and PID fields
 	fields["server"] = l.ServerName
 	fields["pid"] = l.PID
-	
+
 	return l.Logger.WithFields(fields)
 }
 

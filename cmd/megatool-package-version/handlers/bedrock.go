@@ -159,8 +159,8 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 		if len(cells) < 7 {
 			if h.logger != nil {
 				h.logger.WithFields(logrus.Fields{
-					"rowIndex": i,
-					"cellCount": len(cells),
+					"rowIndex":   i,
+					"cellCount":  len(cells),
 					"rowPreview": row[:100] + "...",
 				}).Warn("Invalid row format")
 			}
@@ -181,9 +181,9 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 		if modelName != "" && modelID != "" {
 			if h.logger != nil {
 				h.logger.WithFields(logrus.Fields{
-					"provider": provider,
+					"provider":  provider,
 					"modelName": modelName,
-					"modelID": modelID,
+					"modelID":   modelID,
 				}).Debug("Found Bedrock model")
 			}
 			models = append(models, BedrockModel{
@@ -198,9 +198,9 @@ func (h *BedrockHandler) parseModelsFromHTML(html string) []BedrockModel {
 		} else {
 			if h.logger != nil {
 				h.logger.WithFields(logrus.Fields{
-					"provider": provider,
+					"provider":  provider,
 					"modelName": modelName,
-					"modelID": modelID,
+					"modelID":   modelID,
 				}).Warn("Skipping invalid model data")
 			}
 		}
@@ -249,9 +249,9 @@ func (h *BedrockHandler) extractListFromCell(cell string) []string {
 func (h *BedrockHandler) searchModels(query, provider, region string) (*BedrockModelSearchResult, error) {
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"query": query,
+			"query":    query,
 			"provider": provider,
-			"region": region,
+			"region":   region,
 		}).Debug("Searching Bedrock models")
 	}
 
@@ -296,9 +296,9 @@ func (h *BedrockHandler) searchModels(query, provider, region string) (*BedrockM
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"query": query,
-			"provider": provider,
-			"region": region,
+			"query":        query,
+			"provider":     provider,
+			"region":       region,
 			"totalMatches": len(filteredModels),
 		}).Debug("Completed Bedrock model search")
 	}
@@ -331,9 +331,9 @@ func (h *BedrockHandler) getModelByID(modelID string) (*BedrockModel, error) {
 		if model.ModelID == modelID {
 			if h.logger != nil {
 				h.logger.WithFields(logrus.Fields{
-					"modelID": modelID,
+					"modelID":   modelID,
 					"modelName": model.ModelName,
-					"provider": model.Provider,
+					"provider":  model.Provider,
 				}).Debug("Found Bedrock model by ID")
 			}
 			return &model, nil
@@ -415,8 +415,8 @@ func (h *BedrockHandler) getLatestClaudeSonnetModel() (*BedrockModel, error) {
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
 			"modelName": latestModel.ModelName,
-			"modelID": latestModel.ModelID,
-			"version": latestVersion,
+			"modelID":   latestModel.ModelID,
+			"version":   latestVersion,
 		}).Info("Found latest Claude Sonnet model")
 	}
 
@@ -461,11 +461,11 @@ func (h *BedrockHandler) GetLatestVersion(ctx context.Context, args interface{})
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"action": params.Action,
-			"query": params.Query,
+			"action":   params.Action,
+			"query":    params.Query,
 			"provider": params.Provider,
-			"region": params.Region,
-			"modelID": params.ModelID,
+			"region":   params.Region,
+			"modelID":  params.ModelID,
 		}).Debug("Processing Bedrock request")
 	}
 

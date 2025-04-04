@@ -86,8 +86,8 @@ func (h *SwiftHandler) getGitHubReleases(owner, repo string) ([]GitHubRelease, e
 	if cachedReleases, ok := h.cache.Load(cacheKey); ok {
 		if h.logger != nil {
 			h.logger.WithFields(logrus.Fields{
-				"owner":       owner,
-				"repo":        repo,
+				"owner":        owner,
+				"repo":         repo,
 				"releaseCount": len(cachedReleases.([]GitHubRelease)),
 			}).Debug("Using cached GitHub releases")
 		}
@@ -138,8 +138,8 @@ func (h *SwiftHandler) getGitHubReleases(owner, repo string) ([]GitHubRelease, e
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"owner":       owner,
-			"repo":        repo,
+			"owner":        owner,
+			"repo":         repo,
 			"releaseCount": len(releases),
 		}).Debug("Successfully got GitHub releases")
 	}
@@ -182,7 +182,7 @@ func (h *SwiftHandler) getPackageVersion(packageURL, currentVersion, requirement
 	if constraint != nil && constraint.ExcludePackage {
 		if h.logger != nil {
 			h.logger.WithFields(logrus.Fields{
-				"packageURL": packageURL,
+				"packageURL":  packageURL,
 				"packageName": packageName,
 			}).Debug("Package excluded from updates")
 		}

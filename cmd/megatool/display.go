@@ -38,13 +38,13 @@ func listAvailableServers(indent string) error {
 func displayServerRecords(records []utils.ServerRecord, format, fields string, showHeader bool) error {
 	// Split requested fields
 	fieldList := strings.Split(fields, ",")
-	
+
 	// Check if we have any records
 	if len(records) == 0 {
 		fmt.Println("No running MCP servers found")
 		return nil
 	}
-	
+
 	// Generate output based on format
 	switch format {
 	case "table":
@@ -62,7 +62,7 @@ func displayServerRecords(records []utils.ServerRecord, format, fields string, s
 func displayServerTable(records []utils.ServerRecord, fields []string, showHeader bool) error {
 	// Create a new tabwriter
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	
+
 	// Print header if requested
 	if showHeader {
 		var headers []string
@@ -82,13 +82,13 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 		}
 		fmt.Fprintln(w, strings.Join(headers, "\t"))
 	}
-	
+
 	// Count instances of each server
 	serverCounts := make(map[string]int)
 	for _, record := range records {
 		serverCounts[record.Name]++
 	}
-	
+
 	// Print each record
 	for _, record := range records {
 		var values []string
@@ -97,8 +97,8 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 			case "name":
 				// Add instance indicator if there are multiple instances
 				if serverCounts[record.Name] > 1 {
-					values = append(values, fmt.Sprintf("%s (instance %d of %d)", 
-						record.Name, 
+					values = append(values, fmt.Sprintf("%s (instance %d of %d)",
+						record.Name,
 						getInstanceNumber(records, record),
 						serverCounts[record.Name]))
 				} else {
@@ -120,7 +120,7 @@ func displayServerTable(records []utils.ServerRecord, fields []string, showHeade
 		}
 		fmt.Fprintln(w, strings.Join(values, "\t"))
 	}
-	
+
 	return w.Flush()
 }
 
@@ -134,19 +134,19 @@ func getInstanceNumber(records []utils.ServerRecord, target utils.ServerRecord) 
 			sameNameRecords = append(sameNameRecords, record)
 		}
 	}
-	
+
 	// Sort by start time (oldest first)
 	sort.Slice(sameNameRecords, func(i, j int) bool {
 		return sameNameRecords[i].StartTime.Before(sameNameRecords[j].StartTime)
 	})
-	
+
 	// Find the index of the target record
 	for i, record := range sameNameRecords {
 		if record.PID == target.PID {
 			return i + 1
 		}
 	}
-	
+
 	return 0 // Should not happen
 }
 
@@ -154,16 +154,16 @@ func getInstanceNumber(records []utils.ServerRecord, target utils.ServerRecord) 
 func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 	// Create a slice of maps for JSON output
 	var result []map[string]interface{}
-	
+
 	// Count instances of each server
 	serverCounts := make(map[string]int)
 	for _, record := range records {
 		serverCounts[record.Name]++
 	}
-	
+
 	for _, record := range records {
 		item := make(map[string]interface{})
-		
+
 		for _, field := range fields {
 			switch field {
 			case "name":
@@ -187,16 +187,16 @@ func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 				}
 			}
 		}
-		
+
 		result = append(result, item)
 	}
-	
+
 	// Marshal to JSON
 	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Println(string(jsonData))
 	return nil
 }
@@ -205,7 +205,7 @@ func displayServerJSON(records []utils.ServerRecord, fields []string) error {
 func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader bool) error {
 	// Create a new CSV writer
 	w := csv.NewWriter(os.Stdout)
-	
+
 	// Print header if requested
 	if showHeader {
 		var headers []string
@@ -227,13 +227,13 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 			return err
 		}
 	}
-	
+
 	// Count instances of each server
 	serverCounts := make(map[string]int)
 	for _, record := range records {
 		serverCounts[record.Name]++
 	}
-	
+
 	// Print each record
 	for _, record := range records {
 		var values []string
@@ -242,8 +242,8 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 			case "name":
 				// Add instance indicator if there are multiple instances
 				if serverCounts[record.Name] > 1 {
-					values = append(values, fmt.Sprintf("%s (instance %d of %d)", 
-						record.Name, 
+					values = append(values, fmt.Sprintf("%s (instance %d of %d)",
+						record.Name,
 						getInstanceNumber(records, record),
 						serverCounts[record.Name]))
 				} else {
@@ -267,7 +267,7 @@ func displayServerCSV(records []utils.ServerRecord, fields []string, showHeader 
 			return err
 		}
 	}
-	
+
 	w.Flush()
 	return w.Error()
 }

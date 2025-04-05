@@ -85,7 +85,7 @@ func (f *ColoredFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			b.WriteString(fmt.Sprintf(":%v", pid))
 		}
 		b.WriteString("] ")
-		
+
 		// Remove server and pid from fields to avoid duplication
 		delete(entry.Data, "server")
 		delete(entry.Data, "pid")

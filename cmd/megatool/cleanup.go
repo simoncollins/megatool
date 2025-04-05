@@ -199,7 +199,7 @@ func cleanupLogDirectories(days int, verbose, dryRun, force bool) error {
 					// Extract PID from compressed log filename
 					pidStr := strings.TrimPrefix(fileName, "server_")
 					pidStr = strings.TrimSuffix(pidStr, ".log.gz")
-					
+
 					if pid, err := strconv.Atoi(pidStr); err == nil {
 						// Check if process is running
 						if utils.IsProcessRunning(pid) {
@@ -263,12 +263,12 @@ func cleanupLogDirectories(days int, verbose, dryRun, force bool) error {
 			activeDirs = append(activeDirs, serverPath)
 			activeFiles = append(activeFiles, serverActiveLogFiles...)
 			filesToRemove = append(filesToRemove, serverInactiveLogFiles...)
-			
+
 			// Update oldest active log time for reporting
 			if oldestActiveLogTime.IsZero() || newestLogTime.Before(oldestActiveLogTime) {
 				oldestActiveLogTime = newestLogTime
 			}
-			
+
 			if verbose {
 				utils.PrintInfo("  Server %s has active processes, keeping directory", serverName)
 				if len(serverInactiveLogFiles) > 0 {

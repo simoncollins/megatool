@@ -70,6 +70,9 @@ Where `<server-name>` is one of the available MCP servers:
 |--------|-------------|
 | `--configure` | Configure the server before running |
 | `--client` | Target MCP client (e.g., cline) |
+| `--sse` | Run the server in SSE (Server-Sent Events) mode |
+| `--port` | Port to use for SSE mode (default: 8080) |
+| `--base-url` | Base URL for SSE mode (default: http://localhost:<port>) |
 | `--help`, `-h` | Show help information for the server |
 
 ## The `install` Command
@@ -141,20 +144,51 @@ The Package Version server checks for the latest versions of packages from vario
 
 ## Using MegaTool with MCP Clients
 
-MegaTool is designed to be used with MCP clients, such as Claude or other AI assistants that support the Model Context Protocol. When running an MCP server, it communicates with the client over stdio.
+MegaTool is designed to be used with MCP clients, such as Claude or other AI assistants that support the Model Context Protocol. MegaTool supports two transport modes: stdio and SSE (Server-Sent Events).
 
-### Direct Usage
+### Standard Input/Output (stdio) Mode
 
-To use MegaTool directly with an MCP client:
+By default, MegaTool runs in stdio mode, which is suitable for direct integration with MCP clients:
 
 1. Start the MCP server:
    ```bash
    megatool run <server-name>
    ```
 
-2. The server will wait for MCP requests from the client.
+2. The server will wait for MCP requests from the client over standard input/output.
 
 3. The client can then use the server's tools and resources through the MCP interface.
+
+### Server-Sent Events (SSE) Mode
+
+SSE mode allows the MCP server to be accessed over HTTP, which is useful for web-based clients or when you need to expose the server over a network:
+
+1. Start the MCP server in SSE mode:
+   ```bash
+   megatool run <server-name> --sse --port 8080
+   ```
+
+2. The server will start an HTTP server on the specified port (default: 8080).
+
+3. Clients can connect to the server using the SSE transport at the specified URL (default: http://localhost:8080).
+
+#### SSE Mode Options
+
+| Option | Description |
+|--------|-------------|
+| `--sse` | Enable SSE mode |
+| `--port` | Port to use for the HTTP server (default: 8080) |
+| `--base-url` | Base URL for the server (default: http://localhost:<port>) |
+
+#### Example: Running a Server in SSE Mode
+
+```bash
+# Run the calculator server in SSE mode on port 3000
+megatool run calculator --sse --port 3000
+
+# Run the GitHub server in SSE mode with a custom base URL
+megatool run github --sse --base-url https://mcp.example.com
+```
 
 ### Installing into a Client's Configuration
 

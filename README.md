@@ -36,14 +36,18 @@ See the [detailed installation guide](docs/user/installation.md) for prerequisit
 ## Basic Usage
 
 ```bash
-# Run an MCP server
+# Run an MCP server in stdio mode (default)
 megatool run <server-name>
+
+# Run an MCP server in SSE mode
+megatool run <server-name> --sse --port 8080
 
 # Configure an MCP server
 megatool run <server-name> --configure
 ```
 
 Available servers:
+
 - `calculator` - Simple calculator operations
 - `github` - GitHub repository and user information
 - `package-version` - Package version checker for multiple languages
@@ -59,11 +63,15 @@ megatool run github --configure
 
 # Run the package version server
 megatool run package-version
+
+# Run the calculator server in SSE mode on port 3000
+megatool run calculator --sse --port 3000
 ```
 
 ## Documentation
 
 ### User Documentation
+
 - [Installation Guide](docs/user/installation.md)
 - [General Usage](docs/user/usage.md)
 - [Calculator Server](docs/user/calculator.md)
@@ -71,10 +79,12 @@ megatool run package-version
 - [Package Version Server](docs/user/package-version.md)
 
 ### Contributor Documentation
+
 - [Architecture Overview](docs/contributor/architecture.md)
 - [Development Guide](docs/contributor/development.md)
 - [Project Structure](docs/contributor/project-structure.md)
 - [Adding a New Server](docs/contributor/adding-server.md)
+- [Implementing SSE Mode](docs/contributor/sse-mode.md)
 
 ## License
 

@@ -131,15 +131,15 @@ func InstallServer(clientType ClientType, serverName string) error {
 
 	// Create the server config
 	args := []string{"run"}
-	
+
 	// Add the client flag if it's not the default
 	if clientType != "" {
 		args = append(args, "--client", string(clientType))
 	}
-	
+
 	// Add the server name
 	args = append(args, serverName)
-	
+
 	serverConfig := ServerConfig{
 		Command:     "megatool",
 		Args:        args,

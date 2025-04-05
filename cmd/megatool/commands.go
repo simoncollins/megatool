@@ -119,6 +119,20 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					Usage: "Target MCP client (e.g., cline)",
 					Value: "",
 				},
+				&cli.BoolFlag{
+					Name:  "sse",
+					Usage: "Run the server in SSE mode",
+				},
+				&cli.StringFlag{
+					Name:  "port",
+					Usage: "Port to use for SSE mode (default: 8080)",
+					Value: "8080",
+				},
+				&cli.StringFlag{
+					Name:  "base-url",
+					Usage: "Base URL for SSE mode (default: http://localhost:<port>)",
+					Value: "",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				// Check if we have enough arguments
@@ -157,10 +171,33 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 
 				// Extract client if specified
 				client := c.String("client")
-				
+
+				// Check if SSE mode is enabled
+				sseMode := c.Bool("sse")
+				port := c.String("port")
+				baseURL := c.String("base-url")
+
+				// Prepare arguments for the server
+				var serverArgs []string
+
+				// Add any arguments after the server name
+				if c.NArg() > 1 {
+					serverArgs = append(serverArgs, c.Args().Slice()[1:]...)
+				}
+
+				// Add SSE flags if enabled
+				if sseMode {
+					serverArgs = append(serverArgs, "--sse")
+					if port != "8080" { // Only add if not default
+						serverArgs = append(serverArgs, "--port", port)
+					}
+					if baseURL != "" {
+						serverArgs = append(serverArgs, "--base-url", baseURL)
+					}
+				}
+
 				// Execute the specified MCP server
-				// Pass all arguments after the server name
-				return executeMcpServer(serverName, c.Args().Slice()[1:], client)
+				return executeMcpServer(serverName, serverArgs, client)
 			},
 			BashComplete: func(c *cli.Context) {
 				// If we're completing the first argument, list available servers
@@ -199,9 +236,9 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					Usage:   "Output format (table, json, csv)",
 				},
 				&cli.StringFlag{
-					Name:    "fields",
-					Value:   "name,pid,uptime,client",
-					Usage:   "Comma-separated list of fields to display (name, pid, uptime, client)",
+					Name:  "fields",
+					Value: "name,pid,uptime,client",
+					Usage: "Comma-separated list of fields to display (name, pid, uptime, client)",
 				},
 				&cli.BoolFlag{
 					Name:  "no-header",
@@ -220,7 +257,7 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					utils.PrintError("Failed to read server records: %v", err)
 					return err
 				}
-				
+
 				// Clean up stale records and save back
 				activeRecords := utils.CleanupStaleRecords(records)
 				if len(activeRecords) != len(records) {
@@ -230,7 +267,7 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					}
 					records = activeRecords
 				}
-				
+
 				// Filter by client if specified
 				clientFilter := c.String("client")
 				if clientFilter != "" {
@@ -242,12 +279,12 @@ The server binary must be in the same directory as megatool or in the PATH.`,
 					}
 					records = filteredRecords
 				}
-				
+
 				// Format and display records
 				format := c.String("format")
 				fields := c.String("fields")
 				noHeader := c.Bool("no-header")
-				
+
 				return displayServerRecords(records, format, fields, !noHeader)
 			},
 		},
@@ -280,68 +317,68 @@ using the --pid flag, or use --all to stop all instances.`,
 				if c.NArg() > 0 {
 					serverName = c.Args().First()
 				}
-				
+
 				// Get the PID flag
 				pid := c.Int("pid")
 				all := c.Bool("all")
-				
+
 				// Check if we have enough information
 				if serverName == "" && pid == 0 {
 					// Show running servers
 					fmt.Println("Running servers:")
-					
+
 					// Get running servers
 					records, err := utils.ReadServerRecords()
 					if err != nil {
 						fmt.Println("  Error reading server records")
 						return fmt.Errorf("no server specified")
 					}
-					
+
 					// Clean up stale records
 					records = utils.CleanupStaleRecords(records)
-					
+
 					// Check if any servers are running
 					if len(records) == 0 {
 						fmt.Println("  No running MCP servers found")
 						return fmt.Errorf("no server specified")
 					}
-					
+
 					// Count instances of each server
 					serverCounts := make(map[string]int)
 					for _, record := range records {
 						serverCounts[record.Name]++
 					}
-					
+
 					// Print each running server
 					for _, record := range records {
 						if serverCounts[record.Name] > 1 {
-							fmt.Printf("  %s (instance %d of %d, PID: %d, Uptime: %s)\n", 
+							fmt.Printf("  %s (instance %d of %d, PID: %d, Uptime: %s)\n",
 								record.Name,
 								getInstanceNumber(records, record),
 								serverCounts[record.Name],
-								record.PID, 
+								record.PID,
 								utils.FormatUptime(record.StartTime))
 						} else {
-							fmt.Printf("  %s (PID: %d, Uptime: %s)\n", 
-								record.Name, 
-								record.PID, 
+							fmt.Printf("  %s (PID: %d, Uptime: %s)\n",
+								record.Name,
+								record.PID,
 								utils.FormatUptime(record.StartTime))
 						}
 					}
-					
+
 					return fmt.Errorf("no server specified")
 				}
-				
+
 				// Read server records
 				records, err := utils.ReadServerRecords()
 				if err != nil {
 					utils.PrintError("Failed to read server records: %v", err)
 					return err
 				}
-				
+
 				// Clean up stale records
 				records = utils.CleanupStaleRecords(records)
-				
+
 				// Filter by client if specified
 				clientFilter := c.String("client")
 				if clientFilter != "" {
@@ -353,11 +390,11 @@ using the --pid flag, or use --all to stop all instances.`,
 					}
 					records = filteredRecords
 				}
-				
+
 				// Find matching server records
 				var matchingRecords []utils.ServerRecord
 				var remainingRecords []utils.ServerRecord
-				
+
 				for _, record := range records {
 					if (serverName != "" && record.Name == serverName) || (pid > 0 && record.PID == pid) {
 						matchingRecords = append(matchingRecords, record)
@@ -365,7 +402,7 @@ using the --pid flag, or use --all to stop all instances.`,
 						remainingRecords = append(remainingRecords, record)
 					}
 				}
-				
+
 				// Check if any matching servers were found
 				if len(matchingRecords) == 0 {
 					if serverName != "" {
@@ -375,13 +412,13 @@ using the --pid flag, or use --all to stop all instances.`,
 					} else {
 						utils.PrintError("No server specified")
 					}
-					
+
 					if len(records) > 0 {
 						utils.PrintInfo("Run 'megatool ps' to see running servers")
 					}
 					return fmt.Errorf("server not found")
 				}
-				
+
 				// Handle multiple instances
 				if len(matchingRecords) > 1 && !all && pid == 0 {
 					utils.PrintInfo("Multiple instances of server '%s' are running:", serverName)
@@ -391,7 +428,7 @@ using the --pid flag, or use --all to stop all instances.`,
 					utils.PrintInfo("Use --pid to specify which instance to stop, or --all to stop all instances")
 					return fmt.Errorf("multiple instances found")
 				}
-				
+
 				// Stop the matching servers
 				stoppedCount := 0
 				for _, record := range matchingRecords {
@@ -402,19 +439,19 @@ using the --pid flag, or use --all to stop all instances.`,
 					stoppedCount++
 					utils.PrintInfo("Server '%s' (PID: %d) stopped successfully", record.Name, record.PID)
 				}
-				
+
 				// Update the server records
 				if err := utils.WriteServerRecords(remainingRecords); err != nil {
 					utils.PrintError("Failed to update server records: %v", err)
 					// Continue anyway, this is not fatal
 				}
-				
+
 				if stoppedCount > 0 && stoppedCount < len(matchingRecords) {
 					utils.PrintInfo("Stopped %d of %d instances", stoppedCount, len(matchingRecords))
 				} else if stoppedCount > 1 {
 					utils.PrintInfo("All %d instances stopped successfully", stoppedCount)
 				}
-				
+
 				return nil
 			},
 			BashComplete: func(c *cli.Context) {
@@ -424,16 +461,16 @@ using the --pid flag, or use --all to stop all instances.`,
 					if err != nil {
 						return
 					}
-					
+
 					// Clean up stale records
 					records = utils.CleanupStaleRecords(records)
-					
+
 					// Get unique server names
 					serverNames := make(map[string]bool)
 					for _, record := range records {
 						serverNames[record.Name] = true
 					}
-					
+
 					// Print each server name
 					for name := range serverNames {
 						fmt.Println(name)

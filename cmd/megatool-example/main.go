@@ -10,48 +10,23 @@ import (
 )
 
 func main() {
-	// Create a new GitHub server
-	githubServer := NewGitHubServer()
+	// Create a new example server
+	exampleServer := NewExampleServer()
 
 	// Check if we should run in SSE mode
 	sseMode := os.Getenv("MCP_SERVER_MODE") == "sse"
 	port := os.Getenv("MCP_SERVER_PORT")
 	baseURL := os.Getenv("MCP_SERVER_BASE_URL")
 
-	// Define custom flags
-	flags := []cli.Flag{
-		&cli.BoolFlag{
-			Name:    "configure",
-			Aliases: []string{"c"},
-			Usage:   "Configure GitHub MCP server",
-		},
+	// Create and run the CLI app with custom action if in SSE mode
+	var action func(c *cli.Context) error
+	if sseMode {
+		action = func(c *cli.Context) error {
+			return runSSEServer(exampleServer, port, baseURL)
+		}
 	}
 
-	// Define custom action
-	action := func(c *cli.Context) error {
-		// Handle configuration mode
-		if c.Bool("configure") {
-			return githubServer.Configure()
-		}
-
-		// Load configuration
-		if err := githubServer.LoadConfig(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Run 'megatool github --configure' to configure the GitHub MCP server\n")
-			return err
-		}
-
-		// Run the server in SSE mode if requested
-		if sseMode {
-			return runSSEServer(githubServer, port, baseURL)
-		}
-
-		// Run the server in stdio mode
-		return mcpserver.CreateAndRunServer(githubServer)
-	}
-
-	// Create and run the CLI app
-	app := mcpserver.NewCliApp(githubServer, flags, action)
+	app := mcpserver.NewCliApp(exampleServer, nil, action)
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -84,7 +59,7 @@ func runSSEServer(handler mcpserver.MCPServerHandler, port, baseURL string) erro
 
 	// Only set up logging if not in help mode
 	if !helpMode {
-		logger, _ := mcpserver.SetupLogger("github", os.Getpid())
+		logger, _ := mcpserver.SetupLogger("example", os.Getpid())
 		if logger != nil {
 			logger.WithField("port", port).Info("SSE server listening")
 		}

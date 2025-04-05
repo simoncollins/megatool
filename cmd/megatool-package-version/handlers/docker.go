@@ -216,8 +216,8 @@ func (h *DockerHandler) getTags(registryURL, repository, authHeader string, limi
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"url":      tagsURL,
-			"hasAuth":  authHeader != "",
+			"url":     tagsURL,
+			"hasAuth": authHeader != "",
 		}).Debug("Making Docker tags request")
 	}
 
@@ -431,7 +431,7 @@ func (h *DockerHandler) getDockerHubTags(image string, limit int, includeDigest 
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"image":      image,
+			"image":       image,
 			"resultCount": len(results),
 		}).Debug("Successfully got Docker Hub tags")
 	}
@@ -482,7 +482,7 @@ func (h *DockerHandler) getGHCRTags(image string, limit int, includeDigest bool)
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"image":      image,
+			"image":       image,
 			"resultCount": len(results),
 		}).Debug("Successfully got GitHub Container Registry tags")
 	}
@@ -538,8 +538,8 @@ func (h *DockerHandler) getCustomRegistryTags(registry, image string, limit int,
 
 	if h.logger != nil {
 		h.logger.WithFields(logrus.Fields{
-			"registry":   registry,
-			"image":      image,
+			"registry":    registry,
+			"image":       image,
 			"resultCount": len(results),
 		}).Debug("Successfully got custom registry tags")
 	}
@@ -629,7 +629,7 @@ func (h *DockerHandler) GetLatestVersion(ctx context.Context, args interface{}) 
 	if fetchErr != nil {
 		if h.logger != nil {
 			h.logger.WithFields(logrus.Fields{
-				"image":   params.Image,
+				"image":    params.Image,
 				"registry": params.Registry,
 				"error":    fetchErr.Error(),
 			}).Error("Failed to fetch Docker image tags")
@@ -641,7 +641,7 @@ func (h *DockerHandler) GetLatestVersion(ctx context.Context, args interface{}) 
 	if len(params.FilterTags) > 0 {
 		if h.logger != nil {
 			h.logger.WithFields(logrus.Fields{
-				"image":         params.Image,
+				"image":          params.Image,
 				"filterTagCount": len(params.FilterTags),
 				"resultCount":    len(results),
 			}).Debug("Filtering Docker tags")
@@ -661,7 +661,7 @@ func (h *DockerHandler) GetLatestVersion(ctx context.Context, args interface{}) 
 
 		if h.logger != nil {
 			h.logger.WithFields(logrus.Fields{
-				"image":              params.Image,
+				"image":               params.Image,
 				"filteredResultCount": len(results),
 			}).Debug("Filtered Docker tags")
 		}

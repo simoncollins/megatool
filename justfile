@@ -84,7 +84,9 @@ release:
     @echo "Pushing code and tags to trigger release workflow..."
     @git push
     @git push --tags
-    @VERSION=$$(grep 'const Version =' internal/version/version.go | cut -d'"' -f2) && echo "Release v$$VERSION deployment triggered!"
+    @grep 'const Version =' internal/version/version.go | cut -d'"' -f2 > .version.tmp
+    @echo "Release v$(cat .version.tmp) deployment triggered!"
+    @rm .version.tmp
 
 # List all version tags
 version-list:

@@ -70,21 +70,23 @@ clean:
 
 # Update version and create a matching git tag (prepare for release)
 version VERSION:
+    @echo "Checking version format..."
+    @if echo "{{VERSION}}" | grep -q "^v"; then echo "Error: VERSION should not start with 'v' prefix"; exit 1; fi
     @echo "Updating to version {{VERSION}}"
-    @just _run "sed -i '' 's/const Version = \".*\"/const Version = \"{{VERSION}}\"/' cmd/megatool/version.go"
-    @just _run "git add cmd/megatool/version.go"
-    @just _run "git commit -m \"chore: bump version to {{VERSION}}\""
-    @just _run "git tag -a \"v{{VERSION}}\" -m \"Release v{{VERSION}}\""
+    @sed -i '' 's/const Version = ".*"/const Version = "{{VERSION}}"/' internal/version/version.go
+    @git add internal/version/version.go
+    @git commit -m "chore: bump version to {{VERSION}}"
+    @git tag -a "v{{VERSION}}" -m "Release v{{VERSION}}"
     @echo "Version updated and tagged. To publish this release, run: just release"
 
 # Push code and tags to trigger a release
 release:
     @echo "Pushing code and tags to trigger release workflow..."
-    @just _run "git push"
-    @just _run "git push --tags"
-    @VERSION=$$(if command -v mise >/dev/null 2>&1; then mise exec -- grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; else grep 'const Version =' cmd/megatool/version.go | cut -d'"' -f2; fi) && echo "Release v$$VERSION deployment triggered!"
+    @git push
+    @git push --tags
+    @VERSION=$$(grep 'const Version =' internal/version/version.go | cut -d'"' -f2) && echo "Release v$$VERSION deployment triggered!"
 
 # List all version tags
 version-list:
     @echo "Listing all version tags:"
-    @just _run "git tag -l \"v*\" | sort -V"
+    @git tag -l "v*" | sort -V
